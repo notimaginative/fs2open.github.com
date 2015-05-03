@@ -1361,6 +1361,59 @@ int parse_weapon(int subtype, bool replace, const char *filename)
 				}
 			}
 
+			if (optional_string("+Target Lock Restriction:")) {
+				if (optional_string("current target, any subsystem")) {
+					wip->target_restrict = LR_CURRENT_TARGET_SUBSYS;
+					
+				}
+				else if (optional_string("any target")) {
+					wip->target_restrict = LR_ANY_TARGETS;
+					
+				}
+				else if (optional_string("current target only")) {
+					wip->target_restrict = LR_CURRENT_TARGET;
+					
+				}
+				else {
+					wip->target_restrict = LR_CURRENT_TARGET;
+					
+				}
+				
+			} else {
+				wip->target_restrict = LR_CURRENT_TARGET;
+				
+			}
+			
+				if (optional_string("+Independent Seekers:")) {
+				stuff_boolean(&wip->multi_lock);
+				
+			}
+			
+				if (optional_string("+Trigger Hold:")) {
+				stuff_boolean(&wip->trigger_lock);
+				
+			}
+			
+				if (optional_string("+Reset On Launch:")) {
+				stuff_boolean(&wip->launch_reset_locks);
+				
+			}
+			
+				if (optional_string("+Max Seekers Per Target:")) {
+				stuff_int(&wip->max_seekers_per_target);
+				
+			}
+			
+				if (optional_string("+Max Active Seekers:")) {
+				stuff_int(&wip->max_seeking);
+				
+			}
+
+				if (optional_string("+Ship Types:")) {
+				stuff_string_list(wip->ship_type_restrict_temp);
+				
+			}
+
 			if (wip->is_locked_homing()) {
 				// locked homing missiles have a much longer lifespan than the AI think they do
 				wip->max_lifetime = wip->lifetime * LOCKED_HOMING_EXTENDED_LIFE_FACTOR; 
@@ -3557,6 +3610,7 @@ void weapon_close()
 void weapon_level_init()
 {
 	int i;
+	extern int ships_inited;
 
 	// Reset everything between levels
 	Num_weapons = 0;
@@ -3568,6 +3622,19 @@ void weapon_level_init()
 	for (i=0; i<MAX_WEAPON_TYPES; i++)	{
 		Weapon_info[i].damage_type_idx = Weapon_info[i].damage_type_idx_sav;
 		Weapon_info[i].shockwave.damage_type_idx = Weapon_info[i].shockwave.damage_type_idx_sav;
+
+		if ( ships_inited ) {
+			// populate ship type lock restrictions
+			for ( int j = 0; j < (int)Weapon_info[i].ship_type_restrict_temp.size(); ++j ) {
+				int idx = ship_type_name_lookup((char*)Weapon_info[i].ship_type_restrict_temp[j].c_str());
+
+				if ( idx >= 0 ) {
+					Weapon_info[i].ship_type_restrict.push_back(idx);
+				}
+			}
+
+			Weapon_info[i].ship_type_restrict_temp.clear();
+		}
 	}
 
 	trail_level_init();		// reset all missile trails
@@ -7536,7 +7603,7 @@ void weapon_info::reset()
 	// The order should match the order in the struct!
 	int i, j;
 
-    this->wi_flags.reset();
+	this->wi_flags.reset();
 
 	this->subtype = WP_UNUSED;
 	this->render_type = WRT_NONE;
@@ -7623,11 +7690,24 @@ void weapon_info::reset()
 	this->turn_time = 1.0f;
 	this->fov = 0;				//should be cos(pi), not pi
 
+	this->target_restrict = LR_CURRENT_TARGET;
+	this->multi_lock = false;
+	this->trigger_lock = false;
+	this->launch_reset_locks = false;
+	
+	this->max_seeking = 1;
+	this->max_seekers_per_target = 1;
+	this->ship_type_restrict.clear();
+	this->ship_type_restrict_temp.clear();
+	
+	this->acquire_method = WLOCK_PIXEL;
+
 	this->min_lock_time = 0.0f;
 	this->lock_pixels_per_sec = 50;
 	this->catchup_pixels_per_sec = 50;
 	this->catchup_pixel_penalty = 50;
 	this->seeker_strength = 1.0f;
+	this->lock_fov = 0.85f;
 
 	this->swarm_count = -1;
 	// *Default is 150  -Et1
@@ -7799,7 +7879,7 @@ void weapon_info::reset()
 
 	this->burst_delay = 1.0f; // 1 second, just incase its not defined
 	this->burst_shots = 0;
-    this->burst_flags.reset();
+	this->burst_flags.reset();
 
 	generic_anim_init(&this->thruster_flame);
 	generic_anim_init(&this->thruster_glow);
@@ -7820,6 +7900,7 @@ void weapon_info::reset()
 	// Reset using default constructor
 	this->impact_decal = decals::creation_info();
 }
+
 const char* weapon_info::get_display_string() {
 	if (has_alternate_name()) {
 		return alt_name;
@@ -7829,4 +7910,41 @@ const char* weapon_info::get_display_string() {
 }
 bool weapon_info::has_alternate_name() {
 	return alt_name[0] != '\0';
+}
+
+// Given a weapon, figure out how many independent locks we can have with it.
+int weapon_get_max_missile_seekers(weapon_info *wip)
+{
+	int max_target_locks;
+
+	if ( wip->multi_lock ) {
+		if ( wip->wi_flags[Weapon::Info_Flags::Swarm] ) {
+			max_target_locks = wip->swarm_count;
+		} else if ( wip->wi_flags[Weapon::Info_Flags::Corkscrew] ) {
+			max_target_locks = wip->cs_num_fired;
+		} else {
+			max_target_locks = 1;
+		}
+	} else {
+		max_target_locks = 1;
+	}
+
+	return max_target_locks;
+}
+
+bool weapon_can_lock_on_ship_type(weapon_info *wip, int ship_type)
+{
+	if ( wip->ship_type_restrict.size() == 0 ) {
+		// no restrictions since this list wasn't even populated
+		return true; 
+	}
+
+	for ( size_t i = 0; i < wip->ship_type_restrict.size(); ++i ) {
+		if ( wip->ship_type_restrict[i] == ship_type ) {
+			return true; 
+		}
+	}
+
+	// can't lock this weapon on this ship type
+	return false; 
 }
