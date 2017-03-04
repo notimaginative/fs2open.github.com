@@ -12032,9 +12032,9 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 				target_subsys = lock_data.subsys;
 				locked = 1;
 			} else {
-				target_objnum = -1;
-				target_subsys = NULL;
-				locked = 0;
+				target_objnum = aip->target_objnum;
+				target_subsys = aip->targeted_subsys;
+				locked = aip->current_target_is_locked;
 			}
 		} else {
 			target_objnum = aip->target_objnum;
