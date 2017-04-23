@@ -11890,34 +11890,35 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 
 	// Ensure if this is a "require-lock" missile, that a lock actually exists
 	if ( wip->wi_flags[Weapon::Info_Flags::No_dumbfire] ) {
-		if ( (obj == Player_obj && ( !ship_lock_present(shipp) && !( allow_swarm && (shipp->missile_locks_firing.size() > 0) ) ) )
-			|| ( !(obj == Player_obj) && aip->current_target_is_locked <= 0 ) ) {
-				if ( !Weapon_energy_cheat ) {
+		if (!(obj != Player_obj && aip->current_target_is_locked) && (!ship_lock_present(shipp) && !(allow_swarm && (shipp->missile_locks_firing.size() > 0)))) {
+			if (obj == Player_obj) {
+				if (!Weapon_energy_cheat) {
 					float max_dist;
 
 					max_dist = wip->lifetime * wip->max_speed;
-					if (wip->wi_flags[Weapon::Info_Flags::Local_ssm]){
-						max_dist= wip->lssm_lock_range;
+					if (wip->wi_flags[Weapon::Info_Flags::Local_ssm]) {
+						max_dist = wip->lssm_lock_range;
 					}
 
 					if ((aip->target_objnum != -1) && (vm_vec_dist_quick(&obj->pos, &Objects[aip->target_objnum].pos) > max_dist)) {
-						HUD_sourced_printf(HUD_SOURCE_HIDDEN, "%s", XSTR( "Too far from target to acquire lock", 487));
+						HUD_sourced_printf(HUD_SOURCE_HIDDEN, "%s", XSTR("Too far from target to acquire lock", 487));
 					} else {
 						char missile_name[NAME_LENGTH];
 						strcpy_s(missile_name, wip->get_display_string());
 						end_string_at_first_hash_symbol(missile_name);
-						HUD_sourced_printf(HUD_SOURCE_HIDDEN, XSTR( "Cannot fire %s without a lock", 488), missile_name);
+						HUD_sourced_printf(HUD_SOURCE_HIDDEN, XSTR("Cannot fire %s without a lock", 488), missile_name);
 					}
 
 					snd_play( gamesnd_get_game_sound(ship_get_sound(Player_obj, GameSounds::OUT_OF_MISSLES)) );
 					swp->next_secondary_fire_stamp[bank] = timestamp(800);	// to avoid repeating messages
 					return 0;
 				}
-		} else {
-			// multiplayer clients should always fire the weapon here, so return only if not
-			// a multiplayer client.
-			if (!MULTIPLAYER_CLIENT) {
-				return 0;
+			} else {
+				// multiplayer clients should always fire the weapon here, so return only if not
+				// a multiplayer client.
+				if (!MULTIPLAYER_CLIENT) {
+					return 0;
+				}
 			}
 		}
 	}
