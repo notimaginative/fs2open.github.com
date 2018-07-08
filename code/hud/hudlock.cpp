@@ -743,7 +743,7 @@ void hud_do_lock_indicator(float frametime)
 	}
 }
 
-void hud_lock_acquire_current_target(object *target_objp, ship_subsys *target_subsys, weapon_info *wip)
+void hud_lock_acquire_current_target(object *target_objp, ship_subsys **target_subsys, weapon_info *wip)
 {
 	ship			*target_shipp=NULL;
 	int			lock_in_range=0;
@@ -784,7 +784,7 @@ void hud_lock_acquire_current_target(object *target_objp, ship_subsys *target_su
 				lock_dot=vm_vec_dot(&Player_obj->orient.vec.fvec, &vec_to_lock);
 				if ( lock_dot > best_lock_dot ) {
 					best_lock_dot=lock_dot;
-					target_subsys = ss;
+					*target_subsys = ss;
 				}
 			}
 			ss = GET_NEXT( ss );
@@ -1080,7 +1080,7 @@ void hud_lock_determine_lock_target(lock_info *lock_slot, weapon_info *wip)
 					}
 				}
 			} else {
-				hud_lock_acquire_current_target(lock_slot->obj, lock_slot->subsys, wip);
+				hud_lock_acquire_current_target(lock_slot->obj, &lock_slot->subsys, wip);
 			}
 		}
 	} else {
@@ -1131,7 +1131,7 @@ void hud_lock_determine_lock_target(lock_info *lock_slot, weapon_info *wip)
 				}
 			}
 		} else {
-			hud_lock_acquire_current_target(lock_slot->obj, lock_slot->subsys, wip);
+			hud_lock_acquire_current_target(lock_slot->obj, &lock_slot->subsys, wip);
 		}
 	}
 }
