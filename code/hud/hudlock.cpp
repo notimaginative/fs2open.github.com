@@ -1591,7 +1591,7 @@ void hud_do_lock_indicators(float frametime)
 		}
 
 		if ( current_lock_status == false && lock_slot->locked == true ) {
-			if ( Missile_lock_loop != -1 && snd_is_playing(Missile_lock_loop) ) {
+			if ( Missile_lock_loop.isValid() && snd_is_playing(Missile_lock_loop) ) {
 				snd_stop(Missile_lock_loop);
 			}
 
@@ -1609,13 +1609,13 @@ void hud_do_lock_indicators(float frametime)
 	}
 
 	if ( play_tracking_sound ) {
-		if ( Missile_track_loop == -1 ) {	
+		if ( !Missile_track_loop.isValid() ) {
 			Missile_track_loop = snd_play_looping(gamesnd_get_game_sound(ship_get_sound(Player_obj, GameSounds::MISSILE_TRACKING)), 0.0f , -1, -1);
 		}
 	} else {
-		if ( Missile_track_loop > -1 )	{
+		if ( Missile_track_loop.isValid() )	{
 			snd_stop(Missile_track_loop);
-			Missile_track_loop = -1;
+			Missile_track_loop = sound_handle::invalid();
 		}
 	}
 }

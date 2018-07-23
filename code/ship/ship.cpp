@@ -11954,7 +11954,7 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 	// if trying to fire a swarm missile, make sure being called from right place
 	if ( (wip->wi_flags[Weapon::Info_Flags::Swarm]) && !allow_swarm ) {
 		Assert(wip->swarm_count > 0);
-		if ( wip->multi_lock ) {
+		if ( wip->multi_lock && (&Ai_info[shipp->ai_index] == Player_ai)) {
 			shipp->num_swarm_missiles_to_fire = shipp->missile_locks_firing.size();
 		} else if(wip->swarm_count <= 0){
 			shipp->num_swarm_missiles_to_fire = SWARM_DEFAULT_NUM_MISSILES_FIRED;
@@ -11970,7 +11970,7 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 	if ( (wip->wi_flags[Weapon::Info_Flags::Corkscrew]) && !allow_swarm ) {
 		//phreak 11-9-02 
 		//changed this from 4 to custom number defined in tables
-		if ( wip->multi_lock ) {
+		if ( wip->multi_lock && (&Ai_info[shipp->ai_index] == Player_ai)) {
 			shipp->num_corkscrew_to_fire = shipp->missile_locks_firing.size();
 		} else {
 			shipp->num_corkscrew_to_fire = (ubyte)(shipp->num_corkscrew_to_fire + (ubyte)wip->cs_num_fired);
@@ -12025,7 +12025,7 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 			if ( shipp->missile_locks_firing.size() > 0 ) {
 				lock_info lock_data = shipp->missile_locks_firing.back();
 
-				if ( wip->multi_lock ) {
+				if ( wip->multi_lock && (&Ai_info[shipp->ai_index] == Player_ai)) {
 					shipp->missile_locks_firing.pop_back();
 				}
 
