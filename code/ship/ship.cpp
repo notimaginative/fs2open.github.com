@@ -19444,7 +19444,7 @@ bool ship_stop_secondary_fire(object* objp)
 
 	int bank = swp->current_secondary_bank;
 
-	if ( bank < 0 || bank >= sip->num_secondary_banks ) {
+	if ( bank < 0 || bank >= swp->num_secondary_banks ) {
 		return false;
 	}
 
