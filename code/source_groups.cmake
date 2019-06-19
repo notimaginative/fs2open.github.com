@@ -218,17 +218,6 @@ set (file_root_gamehelp
 	gamehelp/gameplayhelp.h
 )
 
-# GameHelp -> fs2netd files
-set (file_root_gamehelp_fs2netd
-	fs2netd/fs2netd_client.cpp
-	fs2netd/fs2netd_client.h
-	fs2netd/protocol.h
-	fs2netd/tcp_client.cpp
-	fs2netd/tcp_client.h
-	fs2netd/tcp_socket.cpp
-	fs2netd/tcp_socket.h
-)
-
 # GameSequence files
 set (file_root_gamesequence
 	gamesequence/gamesequence.cpp
@@ -652,6 +641,8 @@ set (file_root_nebula
 set (file_root_network
 	network/chat_api.cpp
 	network/chat_api.h
+	network/gtrack.cpp
+	network/gtrack.h
 	network/multi.cpp
 	network/multi.h
 	network/multi_campaign.cpp
@@ -662,6 +653,8 @@ set (file_root_network
 	network/multi_dogfight.h
 	network/multi_endgame.cpp
 	network/multi_endgame.h
+	network/multi_fstracker.cpp
+	network/multi_fstracker.h
 	network/multi_ingame.cpp
 	network/multi_ingame.h
 	network/multi_kick.cpp
@@ -690,6 +683,8 @@ set (file_root_network
 	network/multi_respawn.h
 	network/multi_sexp.cpp
 	network/multi_sexp.h
+	network/multi_sw.cpp
+	network/multi_sw.h
 	network/multi_team.cpp
 	network/multi_team.h
 	network/multi_update.cpp
@@ -710,8 +705,12 @@ set (file_root_network
 	network/multiutil.h
 	network/psnet2.cpp
 	network/psnet2.h
+	network/ptrack.cpp
+	network/ptrack.h
 	network/stand_gui.cpp
 	network/stand_gui.h
+	network/valid.cpp
+	network/valid.h
 )
 
 IF(WIN32)
@@ -1225,7 +1224,6 @@ source_group("ExceptionHandler"                   FILES ${file_root_exceptionhan
 source_group("ExternalDLL"                        FILES ${file_root_externaldll})
 source_group("Fireball"                           FILES ${file_root_fireball})
 source_group("GameHelp"                           FILES ${file_root_gamehelp})
-source_group("GameHelp\\fs2netd"                  FILES ${file_root_gamehelp_fs2netd})
 source_group("GameSequence"                       FILES ${file_root_gamesequence})
 source_group("GameSnd"                            FILES ${file_root_gamesnd})
 source_group("Generated Files"                    FILES ${file_root_generated})
@@ -1318,7 +1316,6 @@ set (file_root
 	${file_root_externaldll}
 	${file_root_fireball}
 	${file_root_gamehelp}
-	${file_root_gamehelp_fs2netd}
 	${file_root_gamesequence}
 	${file_root_gamesnd}
 	${file_root_generated}
