@@ -165,7 +165,7 @@ void multi_fs_tracker_init()
 	}	
 
 	// intialize the low-level game tracking stuff
-	if(!InitGameTrackerClient(GT_FREESPACE2)){
+	if(!InitGameTrackerClient(GT_FS2OPEN)){
 		ml_printf("Error initializing tracker api (gameclient)");
 		return;
 	}	

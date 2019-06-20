@@ -225,11 +225,7 @@ int InitGameTrackerClient(int gametype)
 	LastTrackerUpdate = 0;
 	switch(gametype)
 	{
-	case GT_FREESPACE:
-		Int3();
-		return 0;
-
-	case GT_FREESPACE2:
+	case GT_FS2OPEN:
 		TrackerGameData.len = GAME_HEADER_ONLY_SIZE+sizeof(freespace2_net_game_data);
 		break;
 
@@ -429,11 +425,7 @@ void UpdateGameData(void *buffer)
 	SendingGameOver = 0;
 
 	switch(GameType){
-	case GT_FREESPACE:
-		Int3();
-		break;
-
-	case GT_FREESPACE2:
+	case GT_FS2OPEN:
 		memcpy(FreeSpace2TrackerGameData,buffer,sizeof(freespace2_net_game_data));
 		break;
 
@@ -539,11 +531,7 @@ void StartTrackerGame(void *buffer)
 	SendingGameOver = 0;
 
 	switch(GameType){
-	case GT_FREESPACE:
-		Int3();
-		break;
-
-	case GT_FREESPACE2:
+	case GT_FS2OPEN:
 		memcpy(FreeSpace2TrackerGameData,buffer,sizeof(freespace2_net_game_data));
 		break;
 
@@ -562,7 +550,7 @@ void RequestGameCountWithFilter(void *filter)
 	ubyte packet_data[sizeof(game_packet_header)];
 	int packet_length = 0;
 
-	GameCountReq.game_type = GT_FREESPACE2;
+	GameCountReq.game_type = GT_FS2OPEN;
 	GameCountReq.type = GNT_GAME_COUNT_REQ;
 	GameCountReq.len = GAME_HEADER_ONLY_SIZE+sizeof(filter_game_list_struct);
 	memcpy(&GameCountReq.data, ((filter_game_list_struct*)filter)->channel, CHANNEL_LEN);

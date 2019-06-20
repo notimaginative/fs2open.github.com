@@ -383,7 +383,7 @@ int SendFSPilotData(vmt_stats_struct *fs_pilot)
 		FSFirstSentWrite = timer_get_milliseconds();
 
 		fs_pilot_write.type = UNT_PILOT_DATA_WRITE_NEW;
-		fs_pilot_write.code = CMD_GAME_FREESPACE2;
+		fs_pilot_write.code = CMD_GAME_FS2OPEN;
 		fs_pilot_write.len = PACKED_HEADER_ONLY_SIZE+sizeof(vmt_stats_struct);
 		memcpy(&fs_pilot_write.data,fs_pilot,sizeof(vmt_stats_struct));
 
@@ -463,7 +463,7 @@ int SendSWData(squad_war_result *sw_res, squad_war_response *sw_resp)
 
 		sw_res_write.len = PACKED_HEADER_ONLY_SIZE+sizeof(squad_war_result);
 		sw_res_write.type = UNT_SW_RESULT_WRITE;
-		sw_res_write.code = CMD_GAME_FREESPACE2;
+		sw_res_write.code = CMD_GAME_FS2OPEN;
 		memcpy(&sw_res_write.data, sw_res, sizeof(squad_war_result));
 
 		return 0;	
@@ -554,7 +554,7 @@ int GetFSPilotData(vmt_stats_struct *fs_pilot, const char *pilot_name, const cha
 			fs_pilot_req.type = UNT_PILOT_DATA_READ;			
 		}
 
-		fs_pilot_req.code = CMD_GAME_FREESPACE2;
+		fs_pilot_req.code = CMD_GAME_FS2OPEN;
 		SDL_strlcpy(fs_pr->pilot_name, pilot_name, SDL_arraysize(fs_pr->pilot_name));
 		SDL_strlcpy(fs_pr->tracker_id, tracker_id, SDL_arraysize(fs_pr->tracker_id));
 
@@ -668,7 +668,7 @@ void PollPTrackNet()
 		if ( (bytesin > 0) && (bytesin == inpacket.len) ) {
 			switch(inpacket.type){
 			case UNT_PILOT_DATA_RESPONSE:
-				if(inpacket.code == CMD_GAME_FREESPACE2){
+				if(inpacket.code == CMD_GAME_FS2OPEN){
 					if(FSReadState == STATE_READING_PILOT){
 						vmt_stats_struct *stats;
 						
@@ -685,44 +685,36 @@ void PollPTrackNet()
 							FSReadState = STATE_RECEIVED_PILOT;
 						}
 					}
-				} else if(inpacket.code == CMD_GAME_FREESPACE){
-					Int3();
 				} else {
 					Int3();
 				}
 				break;
 
 			case UNT_PILOT_READ_FAILED:
-				if(inpacket.code == CMD_GAME_FREESPACE2){
+				if(inpacket.code == CMD_GAME_FS2OPEN){
 					if(FSReadState == STATE_READING_PILOT){
 						FSReadState = STATE_PILOT_NOT_FOUND;
 					}
-				} else if(inpacket.code == CMD_GAME_FREESPACE){
-					Int3();
 				} else {
 					Int3();
 				}
 				break;
 
 			case UNT_PILOT_WRITE_SUCCESS:
-				if(inpacket.code == CMD_GAME_FREESPACE2){
+				if(inpacket.code == CMD_GAME_FS2OPEN){
 					if(FSWriteState == STATE_SENDING_PILOT){
 						FSWriteState = STATE_WROTE_PILOT;
 					}
-				} else if(inpacket.code == CMD_GAME_FREESPACE){
-					Int3();
 				} else {
 					Int3();
 				}
 				break;
 
 			case UNT_PILOT_WRITE_FAILED:
-				if(inpacket.code == CMD_GAME_FREESPACE2){
+				if(inpacket.code == CMD_GAME_FS2OPEN){
 					if(FSWriteState == STATE_SENDING_PILOT){
 						FSWriteState = STATE_WRITE_PILOT_FAILED;
 					}
-				} else  if(inpacket.code == CMD_GAME_FREESPACE){
-					Int3();
 				} else {
 					Int3();
 				}
