@@ -382,9 +382,12 @@ int SendFSPilotData(vmt_stats_struct *fs_pilot)
 		FSLastSentWrite = 0;
 		FSFirstSentWrite = timer_get_milliseconds();
 
+		// deal with variable length of vmt_fs2open_struct
+		const unsigned short size_offset = (MAX_FS2OPEN_COUNTS - (fs_pilot->num_ships + fs_pilot->num_medals)) * sizeof(unsigned short);
+
 		fs_pilot_write.type = UNT_PILOT_DATA_WRITE_NEW;
 		fs_pilot_write.code = CMD_GAME_FS2OPEN;
-		fs_pilot_write.len = PACKED_HEADER_ONLY_SIZE+sizeof(vmt_stats_struct);
+		fs_pilot_write.len = PACKED_HEADER_ONLY_SIZE+sizeof(vmt_stats_struct)-size_offset;
 		memcpy(&fs_pilot_write.data,fs_pilot,sizeof(vmt_stats_struct));
 
 		return 0;	

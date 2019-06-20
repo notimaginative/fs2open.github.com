@@ -231,7 +231,7 @@ struct vmt_fs2open_struct {
 	unsigned char num_medals;
 	unsigned char num_ships;
 
-	unsigned short counts[MAX_FS2OPEN_COUNTS];
+	unsigned short counts[MAX_FS2OPEN_COUNTS];	// <-- This *must* be last entry!!!!
 };
 const unsigned short FS2OPEN_BLOCK_SIZE = sizeof(vmt_fs2open_struct) - 1;	// ignore pad byte in size
 
