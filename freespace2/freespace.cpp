@@ -165,6 +165,7 @@
 #include "weapon/shockwave.h"
 #include "weapon/weapon.h"
 #include "tracing/Monitor.h"
+#include "network/multi_fstracker.h"
 
 #include "SDLGraphicsOperations.h"
 
@@ -7577,10 +7578,14 @@ DCF(wepspew, "display the checksum for the current weapons.tbl")
 // if the game is running using hacked data
 int game_hacked_data()
 {
-    // hacked!
-    if(!Game_weapons_tbl_valid || !Game_ships_tbl_valid){
-        return 1;
-    }
+	if (MULTI_IS_TRACKER_GAME) {
+		return multi_fs_tracker_validate_game_data();
+	} else {
+		// hacked!
+		if(!Game_weapons_tbl_valid || !Game_ships_tbl_valid){
+			return 1;
+		}
+	}
 
     // not hacked
     return 0;

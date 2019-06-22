@@ -52,6 +52,11 @@ int SquadWarValidState;
 int SquadWarFirstSent;
 int SquadWarLastSent;
 
+// table validation
+int TableValidState;
+int TableValidFirstSent;
+int TableValidLastSent;
+
 // squad war response
 squad_war_response SquadWarValidateResponse;
 
@@ -211,6 +216,10 @@ int InitValidateClient(void)
 	SquadWarFirstSent = 0;
 	SquadWarLastSent = 0;
 	SquadWarValidState = VALID_STATE_IDLE;
+
+	TableValidFirstSent = 0;
+	TableValidLastSent = 0;
+	TableValidState = VALID_STATE_IDLE;
 
 	memset( &sockaddr, 0, sizeof(struct sockaddr_in) );
 	sockaddr.sin_family = AF_INET; 
@@ -426,6 +435,17 @@ void ValidIdle()
 					}
 					break;
 
+				// table validation response
+				case UNT_VALID_TBL_RSP:
+					if (TableValidState == VALID_STATE_WAITING) {
+						if (inpacket.code == 2) {
+							TableValidState = VALID_STATE_VALID;
+						} else {
+							TableValidState = VALID_STATE_INVALID;
+						}
+					}
+					break;
+
 				case UNT_CONTROL_VALIDATION:
 					Int3();
 					break;
@@ -467,6 +487,12 @@ void ValidIdle()
 		if((timer_get_milliseconds()-SquadWarFirstSent)>=PILOT_REQ_TIMEOUT)
 		{
 			SquadWarValidState = VALID_STATE_TIMEOUT;
+		}
+	}
+
+	if (TableValidState == VALID_STATE_WAITING) {
+		if ( (timer_get_milliseconds() - TableValidFirstSent) >= PILOT_REQ_TIMEOUT ) {
+			TableValidState = VALID_STATE_TIMEOUT;
 		}
 	}
 }
@@ -650,6 +676,79 @@ int ValidateSquadWar(squad_war_request *sw_req, squad_war_response *sw_resp)
 			return 0;
 		} else {
 			return -3;
+		}
+	}
+}
+
+// call with a valid struct to validate a table
+// call with NULL to poll
+
+// Return codes:
+// -3	Still waiting (returned if we were waiting for a tracker response and ValidateTable was called with a non-NULL value
+// -2   Timeout waiting for tracker to respond
+// -1	table invalid
+//  0	Still waiting for response from tracker/Idle
+//  1	table valid
+int ValidateTable(vmt_validate_mission_req_struct *valid_tbl)
+{
+	ubyte packet_data[sizeof(udp_packet_header)];
+	int packet_length = 0;
+
+	ValidIdle();
+
+	if (valid_tbl == NULL) {
+		switch (TableValidState) {
+			case VALID_STATE_IDLE:
+				return 0;
+			case VALID_STATE_WAITING:
+				return 0;
+			case VALID_STATE_VALID:
+				TableValidState = VALID_STATE_IDLE;
+				return 1;
+			case VALID_STATE_INVALID:
+				TableValidState = VALID_STATE_IDLE;
+				return -1;
+			case VALID_STATE_TIMEOUT:
+				TableValidState = VALID_STATE_IDLE;
+				return -2;
+		}
+
+		return 0;
+	} else {
+		if (TableValidState == VALID_STATE_IDLE) {
+			fd_set read_fds;
+			struct timeval timeout;
+
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 0;
+
+			FD_ZERO(&read_fds);
+			FD_SET(Unreliable_socket, &read_fds);
+
+			while ( SELECT(Unreliable_socket+1, &read_fds, NULL, NULL, &timeout, PSNET_TYPE_VALIDATION) ) {
+				int addrsize;
+				struct sockaddr_in fromaddr;
+
+				udp_packet_header inpacket;
+				addrsize = sizeof(struct sockaddr_in);
+				RECVFROM(Unreliable_socket, (char *)&inpacket, sizeof(udp_packet_header), 0, (struct sockaddr *)&fromaddr, &addrsize, PSNET_TYPE_VALIDATION);
+				FD_ZERO(&read_fds);
+				FD_SET(Unreliable_socket, &read_fds);
+			}
+
+			//only send the header, the checksum and the string length plus the null
+			PacketHeader.type = UNT_VALID_TBL_REQ;
+			PacketHeader.len = (short)(PACKED_HEADER_ONLY_SIZE + sizeof(int)+1+strlen(valid_tbl->file_name));
+			memcpy(PacketHeader.data, valid_tbl, PacketHeader.len-PACKED_HEADER_ONLY_SIZE);
+			packet_length = SerializeValidatePacket(&PacketHeader, packet_data);
+			SENDTO(Unreliable_socket, (char *)&packet_data, packet_length, 0, (struct sockaddr *)&rtrackaddr, sizeof(struct sockaddr), PSNET_TYPE_VALIDATION);
+			TableValidState = VALID_STATE_WAITING;
+			TableValidFirstSent = timer_get_milliseconds();
+			TableValidLastSent = timer_get_milliseconds();
+
+			return 0;
+		} else {
+			return -1;
 		}
 	}
 }

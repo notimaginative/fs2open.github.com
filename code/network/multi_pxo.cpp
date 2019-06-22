@@ -1431,8 +1431,10 @@ void multi_pxo_do_normal()
 			Multi_pxo_must_connect = 0;
 			Multi_pxo_must_validate = 0;
 		}
-		// now we have to conenct to PXO
+		// now validate game data, then we have to connect to PXO
 		else {			
+			multi_fs_tracker_validate_game_data();
+
 			Multi_pxo_must_connect = 1;
 			Multi_pxo_must_validate = 0;
 		}

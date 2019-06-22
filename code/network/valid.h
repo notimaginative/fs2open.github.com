@@ -51,15 +51,13 @@ typedef struct vmt_validate_mission_req_struct {
 	char file_name[100];
 } vmt_validate_mission_req_struct;
 
-struct vmt_validate_req_struct {
-	unsigned int checksum;
-	char file_name[MAX_PXO_FILENAME_LEN];
-};
-
 // query the usertracker to validate a mission
 int ValidateMission(vmt_validate_mission_req_struct *valid_msn);
 
 // query the usertracker to validate a squad war match
 int ValidateSquadWar(squad_war_request *sw_req, squad_war_response *sw_resp);
+
+// query the usertracker to validate a table
+int ValidateTable(vmt_validate_mission_req_struct *valid_tbl);
 
 #endif

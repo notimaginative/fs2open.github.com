@@ -26,6 +26,11 @@
 #define MSW_STATUS_VALID						0
 #define MSW_STATUS_INVALID						1
 
+// tracker table validation status
+#define TVALID_STATUS_UNKNOWN						-1
+#define TVALID_STATUS_VALID						0
+#define TVALID_STATUS_INVALID						1
+
 //struct vmt_freespace2_struct;
 class scoring_struct;
 struct squad_war_request;
@@ -88,5 +93,9 @@ int multi_fs_tracker_validate_sw(squad_war_request *sw_req, char *bad_reply, con
 
 // store the results of a squad war mission on PXO, return 1 on success
 int multi_fs_tracker_store_sw(squad_war_result *sw_res, char *bad_reply, const int max_reply_len);
+
+// check all tables with tracker
+// this is hacked data check as well as mod ident
+int multi_fs_tracker_validate_game_data();
 
 #endif

@@ -1125,6 +1125,181 @@ int multi_fs_tracker_validate_mission(char *filename)
 	return MVALID_STATUS_UNKNOWN;
 }
 
+// return a TVALID_STATUS_* constant
+int multi_fs_tracker_validate_table_std()
+{
+	int ret_val;
+
+	// wait for a response from the tracker
+	do {
+		ret_val = ValidateTable(NULL);
+	} while (ret_val == 0);
+
+	// report on the results
+	switch (ret_val) {
+		// timeout
+		case -2:
+			// consider timeout to be fatal and cancel validation
+			return -2;	//TVALID_STATUS_UNKNOWN;
+
+		// invalid
+		case -1:
+			return TVALID_STATUS_INVALID;
+
+		// valid, success
+		case 1:
+			return TVALID_STATUS_VALID;
+	}
+
+	Int3();
+	return 0;
+}
+
+// special return values :
+// 1 for timeout
+// 2 for invalid
+// 3 for valid
+int multi_fs_tracker_validate_table_normal()
+{
+	switch ( ValidateTable(NULL) ) {
+		// timeout
+		case -2:
+			return 1;
+
+		// invalid
+		case -1 :
+			return 2;
+
+		// valid
+		case 1:
+			return 3;
+	}
+
+	// not done yet
+	return 0;
+}
+
+// return an TVALID_STATUS_* value, or -2 if the user has "cancelled"
+int multi_fs_tracker_validate_table(const char *filename)
+{
+	vmt_validate_mission_req_struct table;
+	char popup_string[512] = "";
+
+	if ( !Multi_fs_tracker_inited ) {
+		return TVALID_STATUS_UNKNOWN;
+	}
+
+	// get the checksum of the local file
+	SDL_zero(table);
+	SDL_strlcpy(table.file_name, filename, SDL_arraysize(table.file_name));
+
+	if ( !cf_chksum_long(table.file_name, (uint*)&table.checksum) ) {
+		return TVALID_STATUS_UNKNOWN;
+	}
+
+	// try and validate the table
+	if (ValidateTable(&table) != 0) {
+		return TVALID_STATUS_UNKNOWN;
+	}
+
+	// do frames for standalone and non-standalone
+	if (Game_mode & GM_STANDALONE_SERVER) {
+		int ret_code;
+
+		// set the filename in the dialog
+		std_gen_set_text(filename, 2);
+
+		// validate the table
+		ret_code = multi_fs_tracker_validate_table_std();
+
+		return ret_code;
+	} else {
+		SDL_snprintf(popup_string, SDL_arraysize(popup_string), XSTR("Validating table %s", -1), filename);
+
+		// run a popup
+		switch ( popup_till_condition(multi_fs_tracker_validate_table_normal, XSTR("&Cancel", 667), popup_string) ) {
+			// cancel
+			case 0:
+				extern int TableValidState;
+				TableValidState = VALID_STATE_IDLE;
+				return -2;
+
+			// timeout
+			case 1:
+				return TVALID_STATUS_UNKNOWN;
+
+			// invalid
+			case 2:
+				return TVALID_STATUS_INVALID;
+
+			// valid
+			case 3:
+				return TVALID_STATUS_VALID;
+		}
+	}
+
+	return TVALID_STATUS_UNKNOWN;
+}
+
+// check all tables with tracker
+// this is hacked data check as well as mod ident (done server side)
+// returns:
+//     1 if hacked (or no ident) - stats won't save
+//     0 if ident and not hacked - stats can save
+int multi_fs_tracker_validate_game_data()
+{
+	// should only do this only once per game session
+	static int game_data_status = TVALID_STATUS_UNKNOWN;
+
+	if ( !Multi_fs_tracker_inited ) {
+		return 1; // assume hacked
+	}
+
+	if (game_data_status == TVALID_STATUS_UNKNOWN) {
+		SCP_vector<SCP_string> table_list;
+		size_t tbl_idx, tbm_idx;
+		int rval;
+
+		// grab all tbl and tbm files and send the checksum to tracker
+		// cf_get_file_list() strips ext so we have to do this in parts
+		// let the tracker figure out which files to validate against
+
+		// get all tbl files first
+		cf_get_file_list(table_list, CF_TYPE_TABLES, "*.tbl");
+
+		// add ext back on filenames
+		for (tbl_idx = 0; tbl_idx < table_list.size(); ++tbl_idx) {
+			table_list[tbl_idx].append(".tbl");
+		}
+
+		// next grab any tbm files
+		cf_get_file_list(table_list, CF_TYPE_TABLES, "*.tbm");
+
+		// and add ext
+		for (tbm_idx = tbl_idx; tbm_idx < table_list.size(); ++tbm_idx) {
+			table_list[tbm_idx].append(".tbm");
+		}
+
+		// now check with tracker
+
+		for (size_t idx = 0; idx < table_list.size(); ++idx) {
+			rval = multi_fs_tracker_validate_table( table_list[idx].c_str() );
+
+			// if anything is valid then update our default
+			if ( (rval == TVALID_STATUS_VALID) && (game_data_status == TVALID_STATUS_UNKNOWN) ) {
+				game_data_status = TVALID_STATUS_VALID;
+			}
+			// if anything is invalid then just be done
+			else if (rval == TVALID_STATUS_INVALID) {
+				game_data_status = TVALID_STATUS_INVALID;
+				break;
+			}
+		}
+	}
+
+	return (game_data_status != TVALID_STATUS_VALID);
+}
+
 // report on the results of the stats store procedure
 void multi_fs_tracker_report_stats_results()
 {
