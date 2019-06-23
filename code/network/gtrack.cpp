@@ -219,7 +219,7 @@ static void DeserializeGamePacket(const ubyte *data, const int data_size, game_p
 int InitGameTrackerClient(int gametype)
 {
 	SOCKADDR_IN sockaddr;
-	in_addr_t iaddr;
+	unsigned long iaddr;
 
 	GameType = gametype;
 	LastTrackerUpdate = 0;

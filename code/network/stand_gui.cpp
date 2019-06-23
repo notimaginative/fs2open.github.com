@@ -1734,10 +1734,6 @@ void std_reset_standalone_gui()
 }
 
 // do any gui related issues on the standalone (like periodically updating player stats, etc...)
-// notify the user that the standalone has failed to login to the tracker on startup
-void std_notify_tracker_login_fail()
-{
-}
 
 void std_do_gui_frame()
 {
@@ -1769,7 +1765,10 @@ void std_do_gui_frame()
 	}
 }
 
-
+// notify the user that the standalone has failed to login to the tracker on startup
+void std_tracker_notify_login_fail()
+{
+}
 
 // attempt to log the standalone into the tracker
 void std_tracker_login()

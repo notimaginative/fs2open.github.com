@@ -204,7 +204,7 @@ static void DeserializeValidatePacket(const ubyte *data, const int data_size, ud
 int InitValidateClient(void)
 {
 	struct sockaddr_in sockaddr;
-	in_addr_t iaddr;
+	unsigned long iaddr;
 	ValidFirstSent = 0;
 	ValidLastSent = 0;
 	ValidState = VALID_STATE_IDLE;

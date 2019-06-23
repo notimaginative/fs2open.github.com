@@ -264,7 +264,7 @@ static void DeserializePilotPacket(const ubyte *data, const int data_size, udp_p
 int InitPilotTrackerClient()
 {
 	struct sockaddr_in sockaddr;
-	in_addr_t iaddr;
+	unsigned long iaddr;
 
 	FSWriteState = STATE_IDLE;
 	FSReadState = STATE_IDLE;	
