@@ -40,10 +40,10 @@ int Multi_fs_tracker_inited = 0;
 int Multi_fs_tracker_busy = 0;
 
 // channel to associate when creating a server
-char Multi_fs_tracker_channel[255] = "";
+char Multi_fs_tracker_channel[MAX_PATH] = "";
 
 // channel to use when polling the tracker for games
-char Multi_fs_tracker_filter[255] = "";
+char Multi_fs_tracker_filter[MAX_PATH] = "";
 
 
 // -----------------------------------------------------------------------------------

@@ -37,10 +37,10 @@ struct squad_war_request;
 struct squad_war_result;
 
 // channel to associate when creating a server
-extern char Multi_fs_tracker_channel[255];
+extern char Multi_fs_tracker_channel[MAX_PATH];
 
 // channel to use when polling the tracker for games
-extern char Multi_fs_tracker_filter[255];
+extern char Multi_fs_tracker_filter[MAX_PATH];
 
 // -----------------------------------------------------------------------------------
 // FREESPACE MASTER TRACKER DECLARATIONS
