@@ -1506,6 +1506,7 @@ void standalone_main_init()
 
 	// hacked data
 	if(game_hacked_data()){
+		Netgame.flags |= NG_FLAG_HACKED_SHIPS_TBL;
 		Net_player->flags |= NETINFO_FLAG_HAXOR;
 	}
 
