@@ -5167,8 +5167,7 @@ int multi_create_select_to_index(int select_index)
 int multi_create_ok_to_commit()
 {
 	int player_count, observer_count, idx;
-	int notify_of_hacked_ships_tbl = 0;
-	int notify_of_hacked_weapons_tbl = 0;
+	int notify_of_hacked_tbl = 0;
 	char err_string[255];
 	int abs_index;
 	int found_hack;
@@ -5184,43 +5183,22 @@ int multi_create_ok_to_commit()
 		return 0;
 	}
 
-	// if we're playing with a hacked ships.tbl (on PXO)
-	notify_of_hacked_ships_tbl = 0;
-	if(Net_player->flags & NETINFO_FLAG_AM_MASTER){
-		if(!Game_ships_tbl_valid){
-			notify_of_hacked_ships_tbl = 1;
-		}
-	} else {
-		if(Netgame.flags & NG_FLAG_HACKED_SHIPS_TBL){
-			notify_of_hacked_ships_tbl = 1;
-		}
-	}
-	if(!MULTI_IS_TRACKER_GAME){
-		notify_of_hacked_ships_tbl = 0;
-	}
-	if(notify_of_hacked_ships_tbl){
-		if(popup(PF_USE_AFFIRMATIVE_ICON | PF_USE_NEGATIVE_ICON, 2, XSTR("&Back", 995), XSTR("&Continue", 780), XSTR("You or the server you are playing on has a hacked ships.tbl. Your stats will not be updated on PXO", 1051)) <= 0){
-			return 0;
-		}
-	}
+	// if we're playing with hacked tables (on PXO)
+	if (MULTI_IS_TRACKER_GAME) {
+		notify_of_hacked_tbl = 0;
 
-	// if we're playing with a hacked weapons.tbl (on PXO)
-	notify_of_hacked_weapons_tbl = 0;
-	if(Net_player->flags & NETINFO_FLAG_AM_MASTER){
-		if(!Game_weapons_tbl_valid){
-			notify_of_hacked_weapons_tbl = 1;
+		if (Net_player->flags & NETINFO_FLAG_AM_MASTER) {
+			if ( game_hacked_data() ) {
+				notify_of_hacked_tbl = 1;
+			}
+		} else if (Netgame.flags & NG_FLAG_HACKED_SHIPS_TBL) {
+			notify_of_hacked_tbl = 1;
 		}
-	} else {
-		if(Netgame.flags & NG_FLAG_HACKED_WEAPONS_TBL){
-			notify_of_hacked_weapons_tbl = 1;
-		}
-	}
-	if(!MULTI_IS_TRACKER_GAME){
-		notify_of_hacked_weapons_tbl = 0;
-	}
-	if(notify_of_hacked_weapons_tbl){
-		if(popup(PF_USE_AFFIRMATIVE_ICON | PF_USE_NEGATIVE_ICON, 2, XSTR("&Back", 995), XSTR("&Continue", 780), XSTR("You or the server you are playing on has a hacked weapons.tbl. Your stats will not be updated on PXO", 1052)) <= 0){
-			return 0;
+
+		if (notify_of_hacked_tbl) {
+			if (popup(PF_USE_AFFIRMATIVE_ICON | PF_USE_NEGATIVE_ICON, 2, XSTR("&Back", 995), XSTR("&Continue", 780), XSTR("You or the server you are playing on has a hacked ships.tbl. Your stats will not be updated on PXO", 1051)) <= 0) {
+				return 0;
+			}
 		}
 	}
 

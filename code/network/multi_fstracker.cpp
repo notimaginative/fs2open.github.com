@@ -316,22 +316,11 @@ int multi_fs_tracker_store_stats()
 		Net_players[idx].flags &= ~(NETINFO_FLAG_MT_DONE);
 	}
 
-#ifdef RELEASE_REAL
-	// if playing with an invalid ships.tbl
-	if(!Game_ships_tbl_valid){
-		send_game_chat_packet(Net_player, XSTR("<Server detected a hacked ships.tbl. Stats will not be saved>", 1044), MULTI_MSG_ALL, NULL, NULL, 1);	
+	// if playing with any tables that are hacked/invalid
+	if ( game_hacked_data() ) {
+		send_game_chat_packet(Net_player, XSTR("<Server detected a hacked ships.tbl. Stats will not be saved>", 1044), MULTI_MSG_ALL, NULL, NULL, 1);
 		multi_display_chat_msg(XSTR("<Server detected a hacked ships.tbl. Stats will not be saved>", 1044), 0, 0);
 		popup(PF_USE_AFFIRMATIVE_ICON, 1, POPUP_OK, XSTR("You are playing with a hacked ships.tbl, your stats will not be saved", 1045) );
-		multi_fs_tracker_report_stats_results();
-		Multi_fs_tracker_busy = 0;
-		return 0;
-	}
-
-	// if playing with an invalid weapons.tbl
-	if(!Game_weapons_tbl_valid){
-		send_game_chat_packet(Net_player, XSTR("<Server detected a hacked weapons.tbl. Stats will not be saved>", 1046), MULTI_MSG_ALL, NULL, NULL, 1);	
-		multi_display_chat_msg(XSTR("<Server detected a hacked weapons.tbl. Stats will not be saved>", 1046), 0, 0);
-		popup(PF_USE_AFFIRMATIVE_ICON, 1, POPUP_OK, XSTR("You are playing with a hacked weapons.tbl, your stats will not be saved", 1047) );
 		multi_fs_tracker_report_stats_results();
 		Multi_fs_tracker_busy = 0;
 		return 0;
@@ -361,7 +350,6 @@ int multi_fs_tracker_store_stats()
 		Multi_fs_tracker_busy = 0;
 		return 0;
 	}
-#endif
 
 	popup_till_condition(multi_fs_store_stats_do,XSTR("&Cancel",667), XSTR("Sending player stats requests ...",676));	
 
