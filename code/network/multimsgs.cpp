@@ -1923,6 +1923,11 @@ void send_game_active_packet(net_addr* addr)
 		flags |= AG_FLAG_CAMPAIGN;
 	}
 
+	// if we're registered on multi tracker
+	if (Net_player->flags & NETINFO_FLAG_MT_CONNECTED) {
+		flags |= AG_FLAG_TRACKER;
+	}
+
 	// add the data about the connection speed of the host machine
 	Assert( (Multi_connection_speed >= 0) && (Multi_connection_speed <= 4) );
 	flags |= (Multi_connection_speed << AG_FLAG_CONNECTION_BIT);
