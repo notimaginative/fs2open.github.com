@@ -213,6 +213,7 @@ void multi_vars_init()
 	Next_asteroid_signature = ASTEROID_SIG_MIN;
 	Next_non_perm_signature = NPERM_SIG_MIN;   
 	Next_debris_signature = DEBRIS_SIG_MIN;
+	Next_waypoint_signature = WAYPOINT_SIG_MIN;
 	
 	// server-client critical stuff
 	Multi_button_info_ok = 0;
@@ -320,6 +321,9 @@ void multi_level_init()
 
 	// initialize all netgame timestamps
 	multi_reset_timestamps();
+
+	// initialize object update system and frame tracking.
+	multi_oo_gameplay_init();
 
 	// flush psnet sockets
 	psnet_flush();
@@ -1298,6 +1302,11 @@ void multi_do_frame()
 	
 	// process any tracker messages
 	multi_fs_tracker_process();
+
+	// Cyborg17 update the new frame recording system for accurate client shots, can safely go after everything else in multi.
+	if (MULTIPLAYER_MASTER && (Game_mode & GM_IN_MISSION)) {
+		multi_ship_record_increment_frame();
+	}
 
 	// if on the standalone, do any gui stuff
 	if (Game_mode & GM_STANDALONE_SERVER) {

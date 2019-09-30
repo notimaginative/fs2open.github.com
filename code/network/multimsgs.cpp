@@ -39,10 +39,12 @@
 #include "network/multi_ingame.h"
 #include "network/multiteamselect.h"
 #include "ai/aigoals.h"
+#include "ai/ai.h"
 #include "network/multi_campaign.h"
 #include "network/multi_team.h"
 #include "network/multi_respawn.h"
 #include "network/multi_observer.h"
+#include "network/multi_obj.h"
 #include "asteroid/asteroid.h"
 #include "network/multi_pmsg.h"
 #include "object/object.h"
@@ -1935,11 +1937,11 @@ void send_game_active_packet(net_addr* addr)
 // process information about an active game
 void process_game_active_packet(ubyte* data, header* hinfo)
 {
-	int offset;	
+	int offset;
 	ubyte val;
 	active_game ag;
 	int modes_compatible = 1;
-	
+
 	fill_net_addr(&ag.server_addr, hinfo->addr, hinfo->port);
 
 	// read this game into a temporary structure
@@ -1951,7 +1953,7 @@ void process_game_active_packet(ubyte* data, header* hinfo)
 
 	GET_STRING(ag.name);
 	GET_STRING(ag.mission_name);
-	GET_STRING(ag.title);	
+	GET_STRING(ag.title);
 	GET_DATA(val);
 	ag.num_players = val;
 	GET_USHORT(ag.flags);
@@ -3954,7 +3956,12 @@ void send_observer_update_packet()
 
 	ret = multi_pack_unpack_position( 1, data + packet_size, &Player_obj->pos );
 	packet_size += ret;
-	ret = multi_pack_unpack_orient( 1, data + packet_size, &Player_obj->orient );
+
+	angles temp_angles;
+
+	vm_extract_angles_matrix(&temp_angles, &Player_obj->orient);
+	ret = multi_pack_unpack_orient( 1, data + packet_size, &temp_angles);
+
 	packet_size += ret;
 
 	// add targeting infomation
@@ -3974,6 +3981,7 @@ void process_observer_update_packet(ubyte *data, header *hinfo)
 	int offset,ret;
 	int obs_num;
 	vec3d g_vec;
+	angles temp_angles;
 	matrix g_mat;
 	physics_info bogus_pi;	
 	ushort target_sig;
@@ -3985,7 +3993,11 @@ void process_observer_update_packet(ubyte *data, header *hinfo)
 	memset(&bogus_pi,0,sizeof(physics_info));
 	ret = multi_pack_unpack_position( 0, data + offset, &g_vec );
 	offset += ret;
-	ret = multi_pack_unpack_orient( 0, data + offset, &g_mat );
+	ret = multi_pack_unpack_orient( 0, data + offset, &temp_angles );
+
+	vm_angles_2_matrix(&g_mat, &temp_angles);
+	vm_orthogonalize_matrix(&g_mat);
+
 	offset += ret;
 
 	// targeting information
@@ -4527,6 +4539,9 @@ void process_subsystem_destroyed_packet( ubyte *data, header *hinfo )
 			PACKET_SET_SIZE();
 			return;
 		}
+
+		// Cyborg17 - We need to do this here because otherwise FSO will not mark subsystem strength as zero (It used to rely on the object Update packet)
+		subsysp->current_hits = 0;
 
 		vm_vec_unrotate( &world_hit_pos, &local_hit_pos, &objp->orient );
 		vm_vec_add2( &world_hit_pos, &objp->pos );
@@ -7001,7 +7016,7 @@ void send_client_update_packet(net_player *pl)
 
 		// hull strength and shield mesh information are floats (as a percentage).  Pass the integer
 		// percentage value since that should be close enough
-		percent = (ubyte)std::lround (get_hull_pct(objp) * 100.0f);
+		percent = (ubyte)std::lround (get_hull_pct(objp) * 255.0f);
 		if ( (percent == 0) && (get_hull_pct(objp) > 0.0f) ) {
 			percent = 1;
 		}
@@ -7010,7 +7025,7 @@ void send_client_update_packet(net_player *pl)
 		n_quadrants = (ubyte)objp->n_quadrants;
 		ADD_DATA( n_quadrants );
 		for (i = 0; i < n_quadrants; i++ ) {
-			percent = (ubyte)(objp->shield_quadrant[i] / shield_get_max_quad(objp) * 100.0f);
+			percent = (ubyte)(objp->shield_quadrant[i] / shield_get_max_quad(objp) * 255.0f);
 
 			ADD_DATA( percent );
 		}
@@ -7129,12 +7144,12 @@ void process_client_update_packet(ubyte *data, header *hinfo)
 			objp = Player_obj;
 			sip = &Ship_info[shipp->ship_info_index];
 
-			fl_val = hull_percent * shipp->ship_max_hull_strength / 100.0f;
+			fl_val = hull_percent * shipp->ship_max_hull_strength / 255.0f;
 			objp->hull_strength = fl_val;
 
 			for ( i = 0; i < n_quadrants; i++ ) {
 				if (i < objp->n_quadrants) {
-					fl_val = (shield_percent[i] * shield_get_max_quad(objp) / 100.0f);
+					fl_val = (shield_percent[i] * shield_get_max_quad(objp) / 255.0f);
 					objp->shield_quadrant[i] = fl_val;
 				}
 			}
@@ -7167,7 +7182,6 @@ void process_client_update_packet(ubyte *data, header *hinfo)
 			}
 
 			// update my threat flags.
-			// temporarily commented out until tested.
 			Net_player->m_player->threat_flags = threats;
 		}
 	}
@@ -7463,39 +7477,90 @@ void process_reinforcement_avail( ubyte *data, header *hinfo )
 	}
 }
 
-void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
+void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_num)
 {
 	int packet_size, objnum;
 	ubyte data[MAX_PACKET_SIZE]; // ubanks_fired, current_bank;
-	object *objp;	
+	object* objp;
 	int np_index;
-	net_player *ignore = NULL;
+	net_player* ignore = NULL;
+
+	// just in case nothing got fired
+	if (banks_fired <= 0) {
+		return;
+	}
+
+	// Cyborg17 - new variables for physics calcs to send to server if client
+	vec3d temp_vec, ship_to_wep_vec;
+	matrix temp_transp_mat, wep_adjuster_mat;
+	float distance;
+	ushort last_received_frame, ref_obj_netsig, time_elapsed;
+	angles adjustment_angles;
+
+	// Cyborg17 - and corresponding pointers
+	vec3d* wep_pos, * ref_pos;
+	matrix* wep_ori, * ref_ori;
 
 	// get an object pointer for this ship.
 	objnum = shipp->objnum;
 	objp = &Objects[objnum];
 
-	// if i'm a multiplayer client, I should never send primary fired packets for anyone except me
-	if(MULTIPLAYER_CLIENT && (Player_obj != objp)){
-		return;
+	// If I'm a multiplayer client, I should never send primary fired packets for anyone except me
+	if (MULTIPLAYER_CLIENT) {
+		if (Player_obj != objp){
+			return;
+		}
+		
+		// Cyborg17 -- and if I am a client, let's send the relative position of my fire 
+		// to my current target as well as the frametime.
+		// The whole goal of this is to create the weapon on the server that is
+		// heading at your target in the same exact way that it is on the client.
+
+		object* temp_objp = &Objects[Ships[multi_client_lookup_frame_ship_index()].objnum];
+		Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");
+		if (temp_objp == nullptr) {
+			return;
+		}
+		ref_pos = &temp_objp->pos;
+		ref_ori = &temp_objp->orient;
+		ref_obj_netsig = temp_objp->net_signature;
+
+		wep_pos = &Objects[weapon_obj_num].pos;
+		wep_ori = &Objects[weapon_obj_num].orient;
+
+		// Find the vector between the two objects
+		vm_vec_sub(&ship_to_wep_vec, wep_pos, ref_pos);
+		// quickly store the distance for use on the server
+		distance = vm_vec_mag(&ship_to_wep_vec);
+			
+		// Normalize and unrotate via transposed matrix
+		// Save the transposed matrix so that we can optimize and use it twice.
+		vm_vec_copy_normalize(&temp_vec, &ship_to_wep_vec);
+		vm_copy_transpose(&temp_transp_mat, ref_ori);
+		
+
+		// This is an "unrotate", because the matrix has already been transposed.  
+		// This finalized the relative position we will send to the server. 
+		vm_vec_rotate(&ship_to_wep_vec, &temp_vec, &temp_transp_mat);
+
+		// To fully explain, in matrix multiplication....
+		// A X B = C  Meaning orientation A put through orientation B gives orientation C
+		// To find B we must do: B = A^-1 X C
+		// The transposed matrix of A must be put through C.
+		// Our original matrix is the temp_mat, from our vector that goes from the wep to the ship.
+		// That orientation, temp_mat, we have to transpose.
+		// Our final matrix is the current weapon orientation.
+
+		// step 3, find the rotation matrix that would give us the same relative orientation on the server
+		vm_matrix_x_matrix(&wep_adjuster_mat, &temp_transp_mat, wep_ori);
+
+		// step 4, save on bandwidth by changing to... 
+		vm_extract_angles_matrix(&adjustment_angles, &wep_adjuster_mat);
+
+		// And we need the time too, so send the last frame we got from the server and how much time has happened since then.
+		last_received_frame = multi_client_lookup_frame_idx();
+		time_elapsed = ushort(timestamp() - multi_client_lookup_frame_timestamp());
 	}
-
-	// just in case nothing got fired
-	if(banks_fired <= 0){
-		return;
-	}
-
-	// ubanks_fired = (ubyte)banks_fired;
-	// current_bank = (ubyte)shipp->weapons.current_primary_bank;
-	// Assert( current_bank <= 3 );
-
-	// insert the current primary bank into this byte
-	// ubanks_fired |= (current_bank << CURRENT_BANK_BIT);
-
-	// append the SF_PRIMARY_LINKED flag on the top nibble of the banks_fired
-	// if ( shipp->flags[Ship::Ship_Flags::Primary_linked] ){
-		// ubanks_fired |= (1<<7);
-	// }	
 
 	if(MULTIPLAYER_MASTER){
 		np_index = multi_find_player_by_net_signature(objp->net_signature);
@@ -7510,8 +7575,30 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 	// and server in sync w.r.t. weapon energy for player ship
 	BUILD_HEADER( PRIMARY_FIRED_NEW );
 	ADD_USHORT(objp->net_signature);
-	// ADD_DATA(ubanks_fired);
+	if (MULTIPLAYER_CLIENT) {
+		ADD_USHORT(ref_obj_netsig);
+		ADD_FLOAT(distance);
+		ADD_USHORT(last_received_frame);
+		ADD_USHORT(time_elapsed);
+		ADD_VECTOR(ship_to_wep_vec);
+		ADD_FLOAT(adjustment_angles.b);
+		ADD_FLOAT(adjustment_angles.h);
+		ADD_FLOAT(adjustment_angles.p);
 
+		static int client_count = 0;
+		static bool client_book = false;
+
+		if (client_book == false) {
+			mprintf(("Client Net_signature %d ref_obj_netsig %d Distance %f last_received_frame %d time_elapsed %d \n", objp->net_signature, ref_obj_netsig, distance, last_received_frame, time_elapsed));
+			mprintf(("Our outgoing ref angles are:\n"));
+			mprintf(("%f  %f  %f \n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
+			client_count++;
+			if (client_count == 25) {
+				client_book = true;
+			}
+		}
+	}
+	
 	// if I'm a server, broadcast to all players
 	if(MULTIPLAYER_MASTER){		
 		multi_io_send_to_all(data, packet_size, ignore);
@@ -7528,7 +7615,6 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 {
 	int offset; // linked;	
-	// ubyte banks_fired, current_bank;
 	object* objp;	
 	ship *shipp;
 	ushort shooter_sig;	
@@ -7536,8 +7622,10 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 	// read all packet info
 	offset = HEADER_LENGTH;
 	GET_USHORT(shooter_sig);
-	// GET_DATA(banks_fired);
-	PACKET_SET_SIZE();
+
+	if (MULTIPLAYER_CLIENT) {
+		PACKET_SET_SIZE();
+	}
 
 	// find the object this fired packet is operating on
 	objp = multi_get_network_object( shooter_sig );
@@ -7554,37 +7642,231 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 		return;
 	}
 	shipp = &Ships[objp->instance];
-	
-	// get the link status of the primary banks
-	// linked = 0;
-	// if ( banks_fired & (1<<7) ) {
-		// linked = 1;
-		// banks_fired ^= (1<<7);
-	// }
 
-	// get the current primary bank
-	// current_bank = (ubyte)(banks_fired >> CURRENT_BANK_BIT);
-	// current_bank &= 0x3;
-	// Assert( (current_bank >= 0) && (current_bank < MAX_SHIP_PRIMARY_BANKS) );
-	// shipp->weapons.current_primary_bank = current_bank;
-
-	// strip off all remaining bits and just keep which banks were actually fired.
-	// banks_fired &= 0x3;
-	
-	// set the link status of the ship if not the player.  If it is the player, we will do sanity checking
-	// only (for now).	
-	// if ( !linked ){
-// 		shipp->flags &= ~SF_PRIMARY_LINKED;
-	// } else {
-		// shipp->flags.set(Ship::Ship_Flags::Primary_linked);
-	// }
-
-	// if we're in client firing mode, ignore ones for myself	
-	if((Player_obj != NULL) && (Player_obj == objp)){		
+	// if we're in client firing mode, ignore ones for myself
+	if ((Player_obj != NULL) && (Player_obj == objp)) {
 		return;
 	}
+
+	// Cyborg17 - Now let's process the physics info from the client
+	if (MULTIPLAYER_MASTER) {
+
+		ushort target_ref, client_frame, time_elapsed;
+		float distance, wep_ori_theta, wep_speed;
+		int frame, time_after_frame;
+		angles adjustment_angles;
 		
-	ship_fire_primary( objp, 0, 1 );
+		vec3d ship_to_wep_vec, new_wep_pos, new_tar_pos, temp_vec, wep_push_vec;
+		matrix new_wep_ori, new_tar_ori, adjust_wep_matrix, ship_to_wep_ori;
+		
+		//pointers
+		object* objp_ref;
+
+		//finish processing the packet 
+		GET_USHORT(target_ref);
+		GET_FLOAT(distance);
+		GET_USHORT(client_frame);
+		GET_USHORT(time_elapsed);
+		GET_VECTOR(ship_to_wep_vec);
+		GET_FLOAT(adjustment_angles.b);
+		GET_FLOAT(adjustment_angles.h);
+		GET_FLOAT(adjustment_angles.p);
+
+		PACKET_SET_SIZE();
+
+		mprintf(("Server Net_signature %d ref_obj_netsig %d Distance %f last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, distance, client_frame, time_elapsed));
+
+		objp_ref = multi_get_network_object(target_ref);
+
+		if (objp_ref == nullptr) {
+			// new way failed, use the old way.
+			mprintf(("New New primary packet target is Null! Find your mistake!!\n"));
+			// TODO: add way to check if a primary shot was done this frame.
+			ship_fire_primary(objp, 0, 1);
+			return;
+		}
+
+		if (distance <= 0.0f) {
+			mprintf(("New New primary packet transmitted an invalid distance of %f \n", distance));
+			distance = 0.01f;
+		}
+		
+		ubyte wrap = multi_ship_record_calculate_wrap(client_frame);
+
+		// figure out correct start frame and adjust the time elapsed
+		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
+		
+		if (frame != -1) {
+			// make sure that record we would access is from this ship!
+		//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
+		//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
+		//		return;
+		//	}	
+
+			static bool book = false;
+			static int count = 0;
+
+			if (book == false) {
+				mprintf(("Our angles are:\n"));
+				mprintf(("%f  %f  %f \n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
+			}
+
+			if (book == false) {
+				mprintf(("Our initial weapon position is : \n"));
+				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
+			}
+
+			// adjust time so that we can interpolate the position and orientation that was seen on the client.
+			time_after_frame = multi_ship_record_adjust_timestamp(client_frame, frame, time_elapsed);
+
+			Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
+
+			// maybe interpolation isn't necessary
+			if (time_after_frame <= 0) {
+				// so just lookup where the ship used to be
+				new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
+			} // but usually we'll have to interpolate to get an accurate shot. 
+			else {
+				multi_ship_record_interp_between_frames(&new_tar_pos, &new_tar_ori, objp_ref->net_signature, frame, time_after_frame);
+			}
+			// TEMPORARY, let's just interpolate position for now so that we know that that works.  Then we can interpolate rotation separately later.
+			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
+
+
+			if (book == false) {
+				mprintf(("new_tar_pos is : \n"));
+				mprintf(("%f  %f  %f \n", new_tar_pos.xyz.x, new_tar_pos.xyz.y, new_tar_pos.xyz.z));	
+			}
+
+			if (book == false) {
+				mprintf(("Our incoming new_tar_ori is:\n"));
+				mprintf(("%f  %f  %f \n", new_tar_ori.vec.fvec.xyz.x, new_tar_ori.vec.fvec.xyz.y, new_tar_ori.vec.fvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_tar_ori.vec.rvec.xyz.x, new_tar_ori.vec.rvec.xyz.y, new_tar_ori.vec.rvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_tar_ori.vec.uvec.xyz.x, new_tar_ori.vec.uvec.xyz.y, new_tar_ori.vec.uvec.xyz.z));
+			}
+
+
+			// find out where the angle to the new primary fire should be, by
+			// rotating the vector
+
+			temp_vec = ship_to_wep_vec;
+
+			// figure out the new position for the wep.
+			vm_vec_rotate(&ship_to_wep_vec, &temp_vec, &new_tar_ori);
+
+			// we need a version for the orientation and a version for the position.
+		//	vec3d wep_to_ship_vec = ship_to_wep_vec;
+
+			// Finish finding the weapon's starting position
+			vm_vec_scale(&ship_to_wep_vec, distance);
+			vm_vec_add(&new_wep_pos, &ship_to_wep_vec, &new_tar_pos);
+
+			// now actually make the weapon to ship vec a weapon to ship vector.
+		//	vm_vec_scale(&wep_to_ship_vec, -1.0f);
+
+			// figure out what the orientation of the ship_to_wep_vec is so that we can adjust the weapon orientation back in
+		//	vm_vec_ang_2_matrix(&ship_to_wep_ori, &wep_to_ship_vec, 0.0f);
+		
+
+
+			if (book == false) {
+				mprintf(("ship_to_wep_vec after rotation is: \n"));
+				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
+			}
+
+
+			if (book == false) {
+				mprintf(("ship_to_wep_vec after scaling is: \n"));
+				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
+			}
+
+
+
+			if (book == false) {
+				mprintf(("So we decided the new wep position, before rollback is: \n"));
+				mprintf(("%f  %f  %f \n", new_wep_pos.xyz.x, new_wep_pos.xyz.y, new_wep_pos.xyz.z));
+			}
+
+//			if (book == false) {
+//				mprintf(("Our ship_to_wep_ori after normalizing is:\n"));
+//				mprintf(("%f  %f  %f \n", ship_to_wep_ori.vec.fvec.xyz.x, ship_to_wep_ori.vec.fvec.xyz.y, ship_to_wep_ori.vec.fvec.xyz.z));
+//				mprintf(("%f  %f  %f \n", ship_to_wep_ori.vec.rvec.xyz.x, ship_to_wep_ori.vec.rvec.xyz.y, ship_to_wep_ori.vec.rvec.xyz.z));
+//				mprintf(("%f  %f  %f \n", ship_to_wep_ori.vec.uvec.xyz.x, ship_to_wep_ori.vec.uvec.xyz.y, ship_to_wep_ori.vec.uvec.xyz.z));
+//			}
+
+			// "decompress" the orientation matrix from the packet's angles.
+			vm_angles_2_matrix(&adjust_wep_matrix, &adjustment_angles);
+
+			if (book == false) {
+				mprintf(("Our adjusted wep matrix is: \n"));
+				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.fvec.xyz.x, adjust_wep_matrix.vec.fvec.xyz.y, adjust_wep_matrix.vec.fvec.xyz.z));
+				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.rvec.xyz.x, adjust_wep_matrix.vec.rvec.xyz.y, adjust_wep_matrix.vec.rvec.xyz.z));
+				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.uvec.xyz.x, adjust_wep_matrix.vec.uvec.xyz.y, adjust_wep_matrix.vec.uvec.xyz.z));
+			}
+
+			// Now multiply the two matrices for the orientation of the weapon.
+			vm_matrix_x_matrix(&new_wep_ori, &ship_to_wep_ori, &adjust_wep_matrix);
+
+			// now we need to push the weapon forward based on how much time went by.
+			ship_weapon* swp = &Ships[objp->instance].weapons;
+			weapon_info* winfo_p = &Weapon_info[swp->primary_bank_weapons[swp->current_primary_bank]];
+			wep_speed = winfo_p->max_speed / 1000; // meters per second to meters per ms
+			
+			// Find how far forward to push.
+			//TODO: set up collision detection in between that frame and the current frame.
+			distance = wep_speed * multi_ship_record_get_time_elapsed((ushort)frame);
+			
+			if (book == false) {
+				mprintf(("Our rollback distance is: \n"));
+				mprintf(("%f \n", distance));
+			}
+
+			// do the actual vector calcs of pushing the weapon forward
+			vm_matrix_to_rot_axis_and_angle(&new_wep_ori, &wep_ori_theta, &wep_push_vec);
+
+			vm_vec_scale(&wep_push_vec, distance);
+
+			if (book == false) {
+				mprintf(("Our weapon rollback push total is: \n"));
+				mprintf(("%f  %f  %f \n", wep_push_vec.xyz.x, wep_push_vec.xyz.y, wep_push_vec.xyz.z));
+			}
+
+			// until we've figured out the correct factor to multiply by.  Leave this out.
+			vm_vec_add2(&new_wep_pos, &wep_push_vec);
+
+			// create new weapon instance directly, instead of through ship_fire_primary, because we need to use
+			// the exact orientation from the client's calculations
+			// TODO: this artificially accidentally extends the primary weapon's range.  A proper fix firing
+			// would reduce the range slightly.
+			if (weapon_create(&new_wep_pos, &new_wep_ori, swp->primary_bank_weapons[swp->current_primary_bank],
+				 OBJ_INDEX(objp)) == -1) {
+				mprintf(("WEAPON IS NOT BEING CREATED EVEN THOUGH WE ARE REQUESTING IT! \n"));
+			}
+			if (book == false) {
+				mprintf(("So our final new weapon position is : \n"));
+				mprintf(("%f  %f  %f \n", new_wep_pos.xyz.x, new_wep_pos.xyz.y, new_wep_pos.xyz.z));
+
+				mprintf(("Our weapon orientation is : \n"));
+				mprintf(("%f  %f  %f \n", new_wep_ori.vec.fvec.xyz.x, new_wep_ori.vec.fvec.xyz.y, new_wep_ori.vec.fvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_wep_ori.vec.rvec.xyz.x, new_wep_ori.vec.rvec.xyz.y, new_wep_ori.vec.rvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_wep_ori.vec.uvec.xyz.x, new_wep_ori.vec.uvec.xyz.y, new_wep_ori.vec.uvec.xyz.z));
+				count++;
+				if (count == 20) {
+					book = true;
+				}
+			}
+		} else {
+		// if the new way fails for some reason, use the old way.
+			mprintf(("New primary shot system failed because frame was -1.\n"));
+			ship_fire_primary(objp, 0, 1);
+		}
+	}
+
+	// Cyborg17 - For now, clients are still using old fire packets from the server, the old way
+	if (MULTIPLAYER_CLIENT) {
+	ship_fire_primary(objp, 0, 1);
+	}	
+	
 
 	// Karajorma - It's still a hack but at least this way it only affects AI ships
 	if (!(objp->flags[Object::Object_Flags::Player_ship]))
