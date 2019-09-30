@@ -2884,3 +2884,146 @@ vec4 vm_vec3_to_ve4(const vec3d& vec, float w) {
 
 	return out;
 }
+
+// Cyborg17 - Rotational interpolation between two angle structs in radians, given a rotational velocity, in radians.
+// src0 is the starting angle struct, src1 is the ending angle struct, interp_perc must be a float between 0.0f and 1.0f.
+// rot_vel is only used to determine the rotation direction. This functions assumes an angle <= 2PI rotation in any axis.  
+// You will get inaccurate results otherwise.
+void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, float interp_perc, vec3d *rot_vel) {
+	
+	Assertion((interp_perc >= 0.0f) && (interp_perc <= 1.0f), "Interpolation percentage, %f, sent to vm_interpolate_angles is invalid. The valid range is [0,1], go find a coder!", interp_perc);
+
+	angles arc_measures;
+
+	// this section carefully tests the rot_vel and difference in angles to see if there was rotation in that axis AND if that rotation exceeded 3PI/2 or -PI/2, adjusting the angles if it did.
+
+	  // pitch
+	  // start and end are the same
+	if (src1->p == src0->p) {
+
+		  // *actually* no movement
+		if (rot_vel->xyz.x == 0.0f) {
+			arc_measures.p = 0.0f;
+
+		} // edge case, there was still some positive velocity.
+		else if (rot_vel->xyz.x > 0.0f) {
+			arc_measures.p = PI2;
+
+		} // edge case, there was still some negative velocity.
+		else {
+			arc_measures.p = -PI2;
+		}
+
+	} // positive direction
+	else if (rot_vel->xyz.x >= 0.0f) {
+
+		  // did not wrap
+		if (src1->p > src0->p) {
+			arc_measures.p = src1->p - src0->p;
+
+		} // did wrap
+		else {
+			arc_measures.p = (src1->p + PI2) - src0->p;
+		}
+		
+	} // negative direction
+	else {
+
+		  // did not wrap
+		if (src1->p < src0->p) {
+			arc_measures.p = src1->p - src0->p;
+
+		} // did wrap
+		else {
+			arc_measures.p = (src1->p - PI2) - src0->p;
+		}	
+	}
+
+	// heading
+	// start and end are the same
+	if (src1->h == src0->h) {
+
+		  // *actually* no movement
+		if (rot_vel->xyz.y == 0.0f) {
+			arc_measures.h = 0.0f;
+
+		} // edge case, there was still some positive velocity.
+		else if (rot_vel->xyz.y > 0.0f) {
+			arc_measures.h = PI2;
+
+		} // edge case, there was still some negative velocity.
+		else {
+			arc_measures.h = -PI2;
+		}
+	} // positive direction
+	else if (rot_vel->xyz.y >= 0.0f) {
+
+		  // did not wrap
+		if (src1->h > src0->h) {
+			arc_measures.h = src1->h - src0->h;
+
+		} // did wrap
+		else {
+			arc_measures.h = (src1->h + PI2) - src0->h;
+		}
+
+	} // negative direction
+	else {
+
+		  // did not wrap
+		if (src1->h < src0->h) {
+			arc_measures.h = src1->h - src0->h;
+
+		} // did wrap
+		else {
+			arc_measures.h = (src1->h - PI2) - src0->h;
+		}	
+	}
+
+	// bank
+	// start and end are the same
+	if (src1->b == src0->b) {
+
+		  // *actually* no movement
+		if (rot_vel->xyz.z == 0.0f) {
+			arc_measures.b = 0.0f;
+
+		} // edge case, there was still some positive velocity.
+		else if (rot_vel->xyz.z > 0.0f) {
+			arc_measures.b = PI2;
+
+		} // edge case, there was still some negative velocity.
+		else {
+			arc_measures.b = -PI2;
+		}
+
+	} // positive direction
+	else if (rot_vel->xyz.z >= 0.0f) {
+
+		  // did not wrap
+		if (src1->b > src0->b) {
+			arc_measures.b = src1->b - src0->b;
+
+		} // did wrap
+		else {
+			arc_measures.b = (src1->b + PI2) - src0->b;
+		}
+
+	} // negative direction
+	else {
+
+		  // did not wrap
+		if (src1->b < src0->b) {
+			arc_measures.b = src1->b - src0->b;
+
+		} // did wrap
+		else {
+			arc_measures.b = (src1->b - PI2) - src0->b;
+		}	
+	}
+
+	// Now just multiply the difference in angles by the given percentage, and then add it to the original angle.
+	dest0->p = src0->p + (arc_measures.p * interp_perc);
+	dest0->h = src0->h + (arc_measures.h * interp_perc);
+	dest0->b = src0->b + (arc_measures.b * interp_perc);
+}

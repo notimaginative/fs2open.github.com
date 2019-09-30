@@ -24,6 +24,7 @@
 #include "mission/missionparse.h" //For 2D Mode
 #include "network/multi.h"
 #include "network/multiutil.h"
+#include "network//multi_obj.h"
 #include "object/deadobjectdock.h"
 #include "object/objcollide.h"
 #include "object/object.h"
@@ -764,7 +765,13 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 			}
 
 			// fire non-streaming primaries here
-			ship_fire_primary( objp, 0 );
+			// Cyborg17, this is where the inaccurate multi shots are being shot... 
+			// so let's let the new system take over instead by excluding client player shots
+			// on the server.
+			if (!(MULTIPLAYER_MASTER) || !(objp->signature == Net_players[0].m_player->objnum)) {
+				ship_fire_primary(objp, 0);
+			}
+			
 		} else {
 			// unflag the ship as having the trigger down
 			if(shipp != NULL){
@@ -1574,6 +1581,11 @@ void obj_move_all(float frametime)
 
 	// do post-collision stuff for beam weapons
 	beam_move_all_post();
+
+	// Cyborg17 - Update the server record on multi with these new positions.
+	if (MULTIPLAYER_MASTER) {
+		multi_ship_record_update_all();
+	}
 
 	// update artillery locking info now
 	ship_update_artillery_lock();

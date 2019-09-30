@@ -726,24 +726,28 @@ extern net_player *Net_player;										// pointer to console's net_player entry
 
 // network object management
 #define SHIP_SIG_MIN				1
-#define SHIP_SIG_MAX				(0x2fff)
+#define SHIP_SIG_MAX				4999
 
 #define STANDALONE_SHIP_SIG	(SHIP_SIG_MAX+1)
-#define REAL_SHIP_SIG_MAX		(0x3fff)
+#define REAL_SHIP_SIG_MAX		5500
 
 #define DEBRIS_SIG_MIN			(REAL_SHIP_SIG_MAX+1)
-#define DEBRIS_SIG_MAX			(0x5fff)
+#define DEBRIS_SIG_MAX			15500
 
 #define ASTEROID_SIG_MIN		(DEBRIS_SIG_MAX+1)
-#define ASTEROID_SIG_MAX		(0x7fff)
+#define ASTEROID_SIG_MAX		25500
+
+#define WAYPOINT_SIG_MIN		(ASTEROID_SIG_MAX+1)
+#define WAYPOINT_SIG_MAX		30000
 
 #define NPERM_SIG_MIN			(ASTEROID_SIG_MAX+1)
-#define NPERM_SIG_MAX			(0xffff)
+#define NPERM_SIG_MAX			65535
 
 extern ushort Next_ship_signature;									// next network signature to assign to an object
 extern ushort Next_asteroid_signature;								// next asteroid signature
 extern ushort Next_non_perm_signature;								// next non-permanent signature
 extern ushort Next_debris_signature;								// next debris signature
+extern ushort Next_waypoint_signature;								// next waypoint signature for dynamic waypoints in multi missions
 
 // netgame vars
 extern netgame_info Netgame;											// netgame information

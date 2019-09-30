@@ -21,6 +21,7 @@ struct interp_info;
 class object;
 struct header;
 struct net_player;
+class ship;
 
 
 // client button info flags
@@ -34,15 +35,81 @@ struct net_player;
 #define OOC_AFTERBURNER_ON			(1<<7)
 // NOTE: no additional flags here unless it's sent in an extra data byte
 
+// Cyborg17, Server will be tracking the last two seconds of frames
+#define MAX_FRAMES_RECORDED		240
+#define PRIMARY_PACKET_CUTOFF			2000
+
 // update info
 typedef struct np_update {	
-	ubyte		seq;							// sequence #
 	int		update_stamp;				// global update stamp
-	int		status_update_stamp;
-	int		subsys_update_stamp;
-	ushort	pos_chksum;					// positional checksum
-	ushort	orient_chksum;				// orient checksum
 } np_update;
+
+// ---------------------------------------------------------------------------------------------------
+// POSITION AND ORIENTATION RECORDING
+// if it breaks, find Cyborg17 so you can yell at him
+// This section is almost all server side
+
+// Add a new ship *ON IN-GAME SHIP CREATION* to the tracking struct
+void multi_ship_record_add_ship_server(int obj_num, bool in_mission = true);
+
+// Mark when a ship died or departed....
+void multi_ship_record_mark_as_dead_or_departed(int shipnum);
+
+// Update the tracking struct whenver the object is updated in-game
+void multi_ship_record_update_all();
+
+// increment the tracker per frame, before incoming object packets are processed
+void multi_ship_record_increment_frame();
+
+// returns the last frame's index.
+int multi_find_prev_frame_idx();
+
+// figure out what was the correct wrap
+ubyte multi_ship_record_calculate_wrap(ushort combined_frame);
+
+// find the right frame to start our weapon simulation
+int multi_ship_record_find_frame(ushort client_frame, ubyte wrap, int time_elapsed);
+
+// verify that a given frame exists for a given ship, requires the sequence number that the client sends.
+bool multi_ship_record_verify_frame(object* objp, int seq_num);
+
+// a quick lookups for position and orientation
+vec3d multi_ship_record_lookup_position(object* objp, int frame);
+
+// a quick lookups for orientation
+matrix multi_ship_record_lookup_orientation(object* objp, int frame);
+
+// quickly lookup how much time has passed since the given frame.
+uint multi_ship_record_get_time_elapsed(ushort original_frame);
+
+int multi_ship_record_adjust_timestamp(int client_frame, int frame, int time_elapsed);
+
+// find the exact point on the server that the client sees by interpolating 
+void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_ori, int shipnum, ushort original_frame, int time_elapsed);
+
+// ULTIMATE TODO, write new function that manages collision detection for inbetween frames.
+
+// Clear all from tracking struct
+void multi_ship_record_clear_all();
+
+// ---------------------------------------------------------------------------------------------------
+// Client side frame tracking, for now used only to help lookup info from packets to improve client accuracy.
+// 
+
+// For 
+void multi_ship_record_add_ship_client(int obj_num);
+
+// See if a newly arrived packet is a good new option as a reference object
+void multi_ship_record_rank_seq_num(object* objp, ushort seq_num);
+
+// Quick lookup for the most recently received frame
+ushort multi_client_lookup_frame_ship_index();
+
+// Quick lookup for the most recently received frame
+ushort multi_client_lookup_frame_idx();
+
+// Quick lookup for the most recently received timestamp.
+int multi_client_lookup_frame_timestamp();
 
 // ---------------------------------------------------------------------------------------------------
 // OBJECT UPDATE FUNCTIONS
@@ -61,11 +128,22 @@ void multi_oo_gameplay_init();
 void multi_oo_send_control_info();
 void multi_oo_send_changed_object(object *changedobj);
 
+// helper function that updates all interpolation info for a specific ship from a packet
+void multi_oo_maybe_update_interp_info(int idx, vec3d* pos, angles* ori_angles, bool adjust_pos, bool newest_pos, bool adjust_ori, bool newest_ori);
+
+// reset all sequencing info
+void multi_oo_reset_sequencing();
+
 // is this object one which needs to go through the interpolation
 int multi_oo_is_interp_object(object *objp);
 
-// interp
+// interp position and orientation
 void multi_oo_interp(object *objp);
+
+int multi_oo_calc_pos_time_difference(int net_sig_idx);
+
+// Cyborg17 - sort through subsystems to make sure we only update the ones we need to update.
+//int multi_pack_required_subsytems(ship* shipp, ubyte* data, int packet_size, int header_bytes);
 
 
 // ---------------------------------------------------------------------------------------------------

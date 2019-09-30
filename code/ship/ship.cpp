@@ -5943,12 +5943,7 @@ void ship::clear()
 
 	for (i = 0; i < MAX_PLAYERS; i++ )
 	{
-		np_updates[i].seq = 0;
 		np_updates[i].update_stamp = -1;
-		np_updates[i].status_update_stamp = -1;
-		np_updates[i].subsys_update_stamp = -1;
-		np_updates[i].pos_chksum = 0;
-		np_updates[i].orient_chksum = 0;
 	}
 
 	lightning_stamp = timestamp(-1);
@@ -6155,11 +6150,6 @@ static void ship_set(int ship_index, int objnum, int ship_type)
 	ship_info	*sip = &(Ship_info[ship_type]);
 	ship_weapon	*swp = &shipp->weapons;
 	polymodel *pm = model_get(sip->model_num);
-
-	extern int oo_arrive_time_count[MAX_SHIPS];		
-	extern int oo_interp_count[MAX_SHIPS];	
-	oo_arrive_time_count[shipp - Ships] = 0;
-	oo_interp_count[shipp - Ships] = 0;
 
 	Assert(strlen(shipp->ship_name) <= NAME_LENGTH - 1);
 	shipp->ship_info_index = ship_type;
@@ -9565,6 +9555,15 @@ int ship_create(matrix* orient, vec3d* pos, int ship_type, const char* ship_name
 	// Add this ship to Ship_obj_list
 	shipp->ship_list_index = ship_obj_list_add(objnum);
 
+	// If we're on a multi server, start up stracking for this in the Svr_frames struct.
+	if (Game_mode & (GM_MULTIPLAYER | GM_IN_MISSION)) {
+		if (MULTIPLAYER_MASTER) {
+			multi_ship_record_add_ship_server(objnum);
+		} else {
+			multi_ship_record_add_ship_client(objnum);
+		}
+	}
+
 	// Set time when ship is created
 	shipp->create_time = timer_get_milliseconds();
 
@@ -10733,6 +10732,8 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	bool has_autoaim, has_converging_autoaim, needs_target_pos;	// used to flag weapon/ship as having autoaim
 	float autoaim_fov = 0;			// autoaim limit
 	float dist_to_target = 0;		// distance to target, for autoaim & automatic convergence
+	int weapon_objnums[12];			// store the weapon object_numbers as they are created to pass to multi functions
+	short weapon_objnum_x = 0;
 
 	gamesnd_id		sound_played;	// used to track what sound is played.  If the player is firing two banks
 										// of the same laser, we only want to play one sound
@@ -11393,6 +11394,8 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 							num_fired++;
 							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;
+							weapon_objnums[weapon_objnum_x] = weapon_objnum;
+							weapon_objnum_x++;							
 						}
 					}
 					swp->external_model_fp_counter[bank_to_fire]++;
@@ -11472,10 +11475,16 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	
 	// if multiplayer and we're client-side firing, send the packet
 	if(Game_mode & GM_MULTIPLAYER){
-		// if i'm a client, and this is not me, don't send
-		if(!(MULTIPLAYER_CLIENT && (shipp != Player_ship))){
-			send_NEW_primary_fired_packet( shipp, banks_fired );
+		// if I'm a Host send a primary fired packet packet
+		if(MULTIPLAYER_MASTER) {
+		send_NEW_primary_fired_packet(shipp, banks_fired, weapon_objnums[0]);
+		// or if I'm a client, and it is my ship send it for rollback on the server.
+		} else if (MULTIPLAYER_CLIENT && (shipp == Player_ship)) {
+			for (i = 0; i < weapon_objnum_x; i++) {
+				send_NEW_primary_fired_packet(shipp, banks_fired, weapon_objnums[i]);
+			}
 		}
+		 
 	}
 
    // STATS

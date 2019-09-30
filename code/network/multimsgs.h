@@ -478,7 +478,7 @@ void send_reinforcement_avail( int rnum );
 void process_reinforcement_avail( ubyte *data, header *hinfo );
 
 // new primary fired info
-void send_NEW_primary_fired_packet(ship *shipp, int banks_fired);
+void send_NEW_primary_fired_packet(ship *shipp, int banks_fired, int weapon_obj_num);
 void process_NEW_primary_fired_packet(ubyte *data, header *hinfo);
 
 // new countermeasure fired info
@@ -535,5 +535,9 @@ void process_self_destruct_packet(ubyte *data, header *hinfo);
 
 void send_sexp_packet(ubyte *sexp_packet, int num_ubytes);
 void process_sexp_packet(ubyte *data, header *hinfo);
+
+// Cyborg17 - TODO: help sync the client to the server by sending the timestamps of all frames.
+void send_frame_timestamp_packet();
+void process_frame_timestamp_packet(ubyte *data, header *hinfo);
 
 #endif
