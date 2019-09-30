@@ -341,11 +341,6 @@ int multi_respawn_common_stuff(p_object *pobjp)
 
 	// reset object update stuff
 	for(idx=0; idx<MAX_PLAYERS; idx++){
-		shipp->np_updates[idx].orient_chksum = 0;
-		shipp->np_updates[idx].pos_chksum = 0;
-		shipp->np_updates[idx].seq = 0;
-		shipp->np_updates[idx].status_update_stamp = -1;
-		shipp->np_updates[idx].subsys_update_stamp = -1;
 		shipp->np_updates[idx].update_stamp = -1;
 	}
 

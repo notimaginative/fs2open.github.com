@@ -5623,8 +5623,8 @@ void mouse_force_pos(int x, int y);
 				multi_reset_timestamps();
 			}
 
-			if ((Game_mode & GM_MULTIPLAYER) && (old_state != GS_STATE_DEATH_BLEW_UP) ) {
-				// initialize all object update details
+			// initialize all object update details
+			if (((Game_mode & GM_MULTIPLAYER) || (Game_mode & GM_STANDALONE_SERVER)) && (old_state != GS_STATE_DEATH_BLEW_UP) && (old_state != GS_STATE_MULTI_PAUSED)) {
 				multi_oo_gameplay_init();
 			}
 	
@@ -6489,6 +6489,7 @@ void game_shutdown(void)
 
 	// load up common multiplayer icons
 	multi_unload_common_icons();
+	multi_ship_record_clear_all();	// free multi ship position/orientation tracking system
 	hud_close();	
 	fireball_close();				// free fireball system
 	particle::close();			// close out the particle system

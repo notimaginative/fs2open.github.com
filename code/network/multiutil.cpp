@@ -89,7 +89,7 @@ ushort Next_ship_signature;										// next permanent network signature to assi
 ushort Next_asteroid_signature;									// next signature for an asteroid
 ushort Next_non_perm_signature;									// next non-permanent network signature to assign to an object
 ushort Next_debris_signature;										// next debris signature
-
+ushort Next_waypoint_signature;									// next waypoint signature
 
 // if a client doesn't receive an update for an object after this many seconds, query server
 // as to the objects status.
@@ -97,7 +97,7 @@ ushort Next_debris_signature;										// next debris signature
 #define MAX_SHIPS_PER_QUERY			10
 
 
-// this function assignes the given object with the given signature.  If the signature is 0, then we choose
+// this function assigns the given object with the given signature.  If the signature is 0, then we choose
 // the next signature number from the correct pool.  I thought that it might be desireable
 // to not always have to take the next signature on the list.  what_kind is used to assign either a
 // permanent or non-permanent signature to an object.  permanent signatures are used for ships, non_permanent
@@ -129,7 +129,6 @@ ushort multi_assign_network_signature( int what_kind )
 
 		sig = Next_asteroid_signature++;
 		if ( Next_asteroid_signature == ASTEROID_SIG_MAX ) {
-			Int3();			// get Allender -- signature stuff wrapped.
 			Next_asteroid_signature = ASTEROID_SIG_MIN;
 		}
 
@@ -141,7 +140,6 @@ ushort multi_assign_network_signature( int what_kind )
 
 		sig = Next_debris_signature++;
 		if ( Next_debris_signature == DEBRIS_SIG_MAX ) {
-			Int3();			// get Allender -- signature stuff wrapped.
 			Next_debris_signature = DEBRIS_SIG_MIN;
 		}
 
@@ -154,6 +152,15 @@ ushort multi_assign_network_signature( int what_kind )
 		sig = Next_non_perm_signature++;
 		if ( (Next_non_perm_signature < NPERM_SIG_MIN) || (Next_non_perm_signature == NPERM_SIG_MAX) ) {
 			Next_non_perm_signature = NPERM_SIG_MIN;
+		}
+	} else if (what_kind == MULTI_SIG_WAYPOINT) {
+		if (Next_waypoint_signature < WAYPOINT_SIG_MIN) {
+			Next_waypoint_signature = WAYPOINT_SIG_MIN;
+		}
+
+		sig = Next_waypoint_signature++;
+		if ( (Next_waypoint_signature == WAYPOINT_SIG_MAX)){
+			Next_waypoint_signature = WAYPOINT_SIG_MIN;
 		}
 	} else {
 		Int3();		// get allender - Illegal signature type requested
@@ -182,6 +189,11 @@ ushort multi_get_next_network_signature( int what_kind )
 			Next_asteroid_signature = ASTEROID_SIG_MIN;
 		return Next_asteroid_signature;
 
+	} else if ( what_kind == MULTI_SIG_WAYPOINT ) {
+		if ( Next_waypoint_signature < WAYPOINT_SIG_MIN )
+			Next_waypoint_signature = WAYPOINT_SIG_MIN;
+		return Next_waypoint_signature;
+
 	} else if ( what_kind == MULTI_SIG_NON_PERMANENT ) {
 		if ( Next_non_perm_signature < NPERM_SIG_MIN )
 			Next_non_perm_signature = NPERM_SIG_MIN;
@@ -199,7 +211,7 @@ void multi_set_network_signature( ushort signature, int what_kind )
 {
 	Assertion(signature != 0, "Invalid net signature of 0 requested in multi_set_network_signature().");
 	Assertion(what_kind > 0, "Invalid net signature type of value %d requested in multi_set_network_signature().", what_kind);  // get Allender
-	Assertion(what_kind < 5, "Invalid net signature type of value %d requested in multi_set_network_signature().", what_kind);
+	Assertion(what_kind < 6, "Invalid net signature type of value %d requested in multi_set_network_signature().", what_kind);
 
 	if ( what_kind == MULTI_SIG_SHIP ) {
 		Assert( (signature >= SHIP_SIG_MIN) && (signature <= SHIP_SIG_MAX) );
@@ -210,6 +222,8 @@ void multi_set_network_signature( ushort signature, int what_kind )
 	} else if ( what_kind == MULTI_SIG_ASTEROID ) {
 		Assert( (signature >= ASTEROID_SIG_MIN) && (signature <= ASTEROID_SIG_MAX) );
 		Next_asteroid_signature = signature;
+	} else if ( what_kind == MULTI_SIG_WAYPOINT ) {
+		Assert( (signature >= WAYPOINT_SIG_MIN) && (signature <= WAYPOINT_SIG_MAX) );
 	} else if (what_kind == MULTI_SIG_NON_PERMANENT) {
 		// Cyborg17 - spawn weapons can set this past the max and overflow the short
 		if (signature >= NPERM_SIG_MIN) {
@@ -217,6 +231,7 @@ void multi_set_network_signature( ushort signature, int what_kind )
 		// so if they did, just add it to the minimum, because that's where we need to be, anyway.
 		} else {
 			Next_non_perm_signature = NPERM_SIG_MIN + signature;
+			// and if they somehow wrap twice throw an assert, because that will definitely cause undesired behavior.
 			Assertion(Next_non_perm_signature >= NPERM_SIG_MIN,"Somehow the non permanent signatures in multi_set_network_signature overflowed the short *twice*, and we cannot code around this.\n\n The likely cause is having spawn weapons with too many children.");
 		}
 	} 			
@@ -718,11 +733,6 @@ void multi_assign_player_ship( int net_player_num, object *objp,int ship_class )
 
 	// zero update info	
 	for(idx=0; idx<MAX_PLAYERS; idx++){
-		shipp->np_updates[idx].orient_chksum = 0;
-		shipp->np_updates[idx].pos_chksum = 0;
-		shipp->np_updates[idx].seq = 0;
-		shipp->np_updates[idx].status_update_stamp = -1;
-		shipp->np_updates[idx].subsys_update_stamp = -1;
 		shipp->np_updates[idx].update_stamp = -1;
 	}
 }
@@ -3476,137 +3486,47 @@ int multi_pack_unpack_position( int write, ubyte *data, vec3d *pos)
 
 // Packs/unpacks an orientation matrix.
 // Returns number of bytes read or written.
-int multi_pack_unpack_orient( int write, ubyte *data, matrix *orient)
+// Cyborg17 - Because of testing and a bugfix from Wookiejedi, this now is used in tandem with
+// vm_extract_angles_matrix() to save bandwidth. The raw angles are useful in rotational interpolation.
+int multi_pack_unpack_orient( int write, ubyte *data, angles *angles)
 {
 	bitbuffer buf;
 
-	bitbuffer_init(&buf, data + 1);
+	bitbuffer_init(&buf, data);
 
-	vec3d rot_axis;	
-	float theta;
-	int a, b, c, d;
-	angles ang;	
-	ubyte flag = 0x00;	
+	int a, b, c;
 
-	#define D_SCALE 32768.0f
-	#define D_MAX_RANGE 32767
-	#define D_MIN_RANGE -32768
-
-	#define N_SCALE 2048.0f
-	#define N_MAX_RANGE 2047
-	#define N_MIN_RANGE -2048
+	// set up some constants to facilitate compression 
+	const float n_scale = 4096.0f / PI;
+	const int n_min_range = -4096;
+	const int n_max_range =  4095;
 
 	if ( write )	{			
-		// degenerate case - send the whole orient matrix
-		vm_extract_angles_matrix(&ang, orient);	
-		if((ang.h > 3.130) && (ang.h < 3.150)){
+		// Subtract PI/2 because the output of vm_extract_angles_matrix is from -PI/2 to 3PI/2
+		a = fl2i((angles->b - PI/2) * n_scale); 
+		b = fl2i((angles->h - PI/2) * n_scale);
+		c = fl2i((angles->p - PI/2) * n_scale);
 
-			flag = 0xff;
-			
-			// stuff it	
-			a = fl2i(orient->vec.fvec.xyz.x * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.fvec.xyz.y * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.fvec.xyz.z * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-
-			a = fl2i(orient->vec.uvec.xyz.x * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.uvec.xyz.y * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.uvec.xyz.z * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-
-			a = fl2i(orient->vec.rvec.xyz.x * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.rvec.xyz.y * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-			a = fl2i(orient->vec.rvec.xyz.z * D_SCALE);
-			CAP(a, D_MIN_RANGE, D_MAX_RANGE);			
-			bitbuffer_put( &buf, a, 16  );
-		} else {
-				
-			vm_matrix_to_rot_axis_and_angle(orient, &theta, &rot_axis);		
-			// Have theta, which is an angle between 0 and PI.
-			// Convert it to be between -1.0f and 1.0f
-			theta = theta*2.0f/PI-1.0f;			
-
-			// -1 to 1
-			a = fl2i(rot_axis.xyz.x*N_SCALE); 
-			b = fl2i(rot_axis.xyz.y*N_SCALE);
-			c = fl2i(rot_axis.xyz.z*N_SCALE);
-			d = fl2i(theta*N_SCALE);
-
-			CAP(a, N_MIN_RANGE, N_MAX_RANGE);
-			CAP(b, N_MIN_RANGE, N_MAX_RANGE);
-			CAP(c, N_MIN_RANGE, N_MAX_RANGE);
-			CAP(d, N_MIN_RANGE, N_MAX_RANGE);
+		CAP(a, n_min_range, n_max_range);
+		CAP(b, n_min_range, n_max_range);
+		CAP(c, n_min_range, n_max_range);
 					
-			bitbuffer_put( &buf, (uint)a, 12 );
-			bitbuffer_put( &buf, (uint)b, 12 );
-			bitbuffer_put( &buf, (uint)c, 12 );
-			bitbuffer_put( &buf, (uint)d, 12 );
-		}
+		bitbuffer_put( &buf, (uint)a, 13 );
+		bitbuffer_put( &buf, (uint)b, 13 );
+		bitbuffer_put( &buf, (uint)c, 13 );
 
-		// flag for degenerate case
-		data[0] = flag;
-
-		return bitbuffer_write_flush(&buf) + 1;
+		return bitbuffer_write_flush(&buf);
 	} else {
-		flag = data[0];
 
-		// degenerate
-		if(flag){
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.fvec.xyz.x = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.fvec.xyz.y = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.fvec.xyz.z = i2fl(a) / D_SCALE;			
+		a = bitbuffer_get_signed(&buf,13);
+		b = bitbuffer_get_signed(&buf,13);
+		c = bitbuffer_get_signed(&buf,13);
 
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.uvec.xyz.x = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.uvec.xyz.y = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.uvec.xyz.z = i2fl(a) / D_SCALE;			
-
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.rvec.xyz.x = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.rvec.xyz.y = i2fl(a) / D_SCALE;			
-			a = bitbuffer_get_signed(&buf, 16);
-			orient->vec.rvec.xyz.z = i2fl(a) / D_SCALE;			
-		} else {
-			a = bitbuffer_get_signed(&buf,12);
-			b = bitbuffer_get_signed(&buf,12);
-			c = bitbuffer_get_signed(&buf,12);
-			d = bitbuffer_get_signed(&buf,12);
-
-			// special case		
-			rot_axis.xyz.x = i2fl(a)/N_SCALE;
-			rot_axis.xyz.y = i2fl(b)/N_SCALE;
-			rot_axis.xyz.z = i2fl(c)/N_SCALE;
-			theta = i2fl(d)/N_SCALE;
-				
-			// Convert theta back to range 0-PI
-			theta = (theta+1.0f)*PI_2;
-				
-			vm_quaternion_rotate(orient, theta, &rot_axis);		
-
-			vm_orthogonalize_matrix(orient);		
-		}
-
-		return bitbuffer_read_flush(&buf) + 1;
+		angles->b = PI/2 + (i2fl(a)/n_scale);
+		angles->h = PI/2 + (i2fl(b)/n_scale);
+		angles->p = PI/2 + (i2fl(c)/n_scale);
+		
+		return bitbuffer_read_flush(&buf);
 	}
 }
 
@@ -3627,130 +3547,31 @@ int multi_pack_unpack_vel( int write, ubyte *data, matrix *orient, vec3d * /*pos
 		u = vm_vec_dot( &orient->vec.uvec, &pi->vel );
 		f = vm_vec_dot( &orient->vec.fvec, &pi->vel );
 
-		a = fl2i(r * 0.5f); 
-		b = fl2i(u * 0.5f);
-		c = fl2i(f * 0.5f);
-		CAP(a,-512,511);
-		CAP(b,-512,511);
-		CAP(c,-512,511);
-		bitbuffer_put( &buf, (uint)a, 10 );
-		bitbuffer_put( &buf, (uint)b, 10 );
-		bitbuffer_put( &buf, (uint)c, 10 );
+		a = fl2i(r * 4.0f); 
+		b = fl2i(u * 4.0f);
+		c = fl2i(f * 4.0f);
+		CAP(a,-4096,4095);
+		CAP(b,-4096,4095);
+		CAP(c,-4096,4095);
+		bitbuffer_put( &buf, (uint)a, 13 );
+		bitbuffer_put( &buf, (uint)b, 13 );
+		bitbuffer_put( &buf, (uint)c, 13 );
 
 		return bitbuffer_write_flush(&buf);
 	} else {
 		// unpack velocity
-		a = bitbuffer_get_signed(&buf,10);
-		b = bitbuffer_get_signed(&buf,10);
-		c = bitbuffer_get_signed(&buf,10);
-		r = i2fl(a)/0.5f;
-		u = i2fl(b)/0.5f;
-		f = i2fl(c)/0.5f;
+		a = bitbuffer_get_signed(&buf,13);
+		b = bitbuffer_get_signed(&buf,13);
+		c = bitbuffer_get_signed(&buf,13);
+		r = i2fl(a)/4.0f;
+		u = i2fl(b)/4.0f;
+		f = i2fl(c)/4.0f;
 
 		// Convert into world coordinates
 		vm_vec_zero(&pi->vel);
 		vm_vec_scale_add2( &pi->vel, &orient->vec.rvec, r );
 		vm_vec_scale_add2( &pi->vel, &orient->vec.uvec, u );
 		vm_vec_scale_add2( &pi->vel, &orient->vec.fvec, f );
-
-		return bitbuffer_read_flush(&buf);
-	}
-}
-
-// Packs/unpacks desired_velocity
-// Returns number of bytes read or written.
-int multi_pack_unpack_desired_vel( int write, ubyte *data, matrix *orient, vec3d * /*pos*/, physics_info *pi, ship_info *sip)
-{
-	bitbuffer buf;
-
-	bitbuffer_init(&buf,data);
-
-	int a;
-	vec3d	max_vel;
-	float r,u,f;
-	int fields = 0;
-
-	max_vel.xyz.x = MAX( sip->max_vel.xyz.x, sip->afterburner_max_vel.xyz.x );
-	max_vel.xyz.y = MAX( sip->max_vel.xyz.y, sip->afterburner_max_vel.xyz.y );
-	max_vel.xyz.z = MAX( sip->max_vel.xyz.z, sip->afterburner_max_vel.xyz.z );	
-
-	if ( write )	{
-		// Find desired vel in local coordinates
-		// Velocity can be from -1024 to 1024
-
-		// bitfields for each value		
-		if(max_vel.xyz.x > 0.0f){
-			fields |= (1<<0);
-		}
-		if(max_vel.xyz.y > 0.0f){
-			fields |= (1<<1);
-		}
-		if(max_vel.xyz.z > 0.0f){
-			fields |= (1<<2);
-		}		
-		// fields = sip - Ship_info;
-		bitbuffer_put(&buf, (uint)fields, 8);
-
-		r = vm_vec_dot( &orient->vec.rvec, &pi->desired_vel );
-		u = vm_vec_dot( &orient->vec.uvec, &pi->desired_vel );
-		f = vm_vec_dot( &orient->vec.fvec, &pi->desired_vel );
-
-		if ( max_vel.xyz.x > 0.0f )	{
-			r = r / max_vel.xyz.x;
-			a = fl2i( r * 128.0f );
-			CAP(a,-128, 127 );			
-			bitbuffer_put( &buf, (uint)a, 8 );			
-		} 
-
-		if ( max_vel.xyz.y > 0.0f )	{
-			u = u / max_vel.xyz.y;
-			a = fl2i( u * 128.0f );
-			CAP(a,-128, 127 );
-			bitbuffer_put( &buf, (uint)a, 8 );
-		} 
-
-		if ( max_vel.xyz.z > 0.0f )	{
-			f = f / max_vel.xyz.z;
-			a = fl2i( f * 128.0f );
-			CAP(a,-128, 127 );
-			bitbuffer_put( &buf, (uint)a, 8 );
-		}
-
-		return bitbuffer_write_flush(&buf);
-	} else {
-
-		// Find desired vel in local coordinates
-		// Velocity can be from -1024 to 1024
-
-		// get the fields bitbuffer
-		fields = bitbuffer_get_signed(&buf, 8);
-		
-		if ( fields & (1<<0) )	{
-			a = bitbuffer_get_signed(&buf,8);
-			r = i2fl(a)/128.0f;
-		} else {
-			r = 0.0f;
-		}
-		
-		if ( fields & (1<<1) )	{
-			a = bitbuffer_get_signed(&buf,8);
-			u = i2fl(a)/128.0f;
-		} else {
-			u = 0.0f;
-		}
-		
-		if ( fields & (1<<2) )	{
-			a = bitbuffer_get_signed(&buf,8);
-			f = i2fl(a)/128.0f;
-		} else {
-			f = 0.0f;
-		}		
-		
-		// Convert into world coordinates
-		vm_vec_zero(&pi->vel);
-		vm_vec_scale_add2( &pi->desired_vel, &orient->vec.rvec, r*max_vel.xyz.x );
-		vm_vec_scale_add2( &pi->desired_vel, &orient->vec.uvec, u*max_vel.xyz.y );
-		vm_vec_scale_add2( &pi->desired_vel, &orient->vec.fvec, f*max_vel.xyz.z );
 
 		return bitbuffer_read_flush(&buf);
 	}
@@ -3790,84 +3611,6 @@ int multi_pack_unpack_rotvel( int write, ubyte *data, matrix * /*orient*/, vec3d
 		pi->rotvel.xyz.x = i2fl(a)/32.0f;
 		pi->rotvel.xyz.y = i2fl(b)/32.0f;
 		pi->rotvel.xyz.z = i2fl(c)/32.0f;
-
-		return bitbuffer_read_flush(&buf);
-	}
-}
-
-// Packs/unpacks desired rotvel
-// Returns number of bytes read or written.
-int multi_pack_unpack_desired_rotvel( int write, ubyte *data, matrix * /*orient*/, vec3d * /*pos*/, physics_info *pi, ship_info *sip)
-{
-	bitbuffer buf;
-	int fields = 0;
-
-	bitbuffer_init(&buf,data);
-
-	int a;
-	float r,u,f;
-
-	if ( write )	{
-		// use ship_info values for max_rotvel instead of taking it from physics info
-
-		// bitfields for each value
-		if(sip->max_rotvel.xyz.x > 0.0f){
-			fields |= (1<<0);
-		}
-		if(sip->max_rotvel.xyz.y > 0.0f){
-			fields |= (1<<1);
-		}
-		if(sip->max_rotvel.xyz.z > 0.0f){
-			fields |= (1<<2);
-
-		}
-		bitbuffer_put(&buf, (uint)fields, 8);
-
-		// output desired rotational velocity as a percent of max		
-		if ( sip->max_rotvel.xyz.x > 0.0f )	{		
-			a = fl2i( pi->desired_rotvel.xyz.x*128.0f / sip->max_rotvel.xyz.x );
-			CAP(a,-128, 127 );
-			bitbuffer_put( &buf, (uint)a, 8 );
-		} 
-
-		if ( sip->max_rotvel.xyz.y > 0.0f )	{		
-			a = fl2i( pi->desired_rotvel.xyz.y*128.0f / sip->max_rotvel.xyz.y );
-			CAP(a,-128, 127 );
-			bitbuffer_put( &buf, (uint)a, 8 );
-		} 
-
-		if ( sip->max_rotvel.xyz.z > 0.0f )	{		
-			a = fl2i( pi->desired_rotvel.xyz.z*128.0f / sip->max_rotvel.xyz.z );
-			CAP(a,-128, 127 );
-			bitbuffer_put( &buf, (uint)a, 8 );
-		} 
-
-		return bitbuffer_write_flush(&buf);
-	} else {
-		fields = bitbuffer_get_signed(&buf, 8);
-
-		// unpack desired rotational velocity
-		if ( fields & (1<<0) )	{		
-			a = bitbuffer_get_signed(&buf,8);
-			r = i2fl(a)/128.0f;
-		} else {
-			r = 0.0f;
-		}
-		if ( fields & (1<<1) )	{		
-			a = bitbuffer_get_signed(&buf,8);
-			u = i2fl(a)/128.0f;
-		} else {
-			u = 0.0f;
-		}
-		if ( fields & (1<<2) )	{		
-			a = bitbuffer_get_signed(&buf,8);
-			f = i2fl(a)/128.0f;
-		} else {
-			f = 0.0f;
-		}
-		pi->desired_rotvel.xyz.x = r*sip->max_rotvel.xyz.x;
-		pi->desired_rotvel.xyz.y = u*sip->max_rotvel.xyz.y;
-		pi->desired_rotvel.xyz.z = f*sip->max_rotvel.xyz.z;
 
 		return bitbuffer_read_flush(&buf);
 	}
