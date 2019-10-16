@@ -491,7 +491,7 @@ void multi_fs_tracker_send_game_request()
 
 	// if we have a valid filter, use that instead		
 	len = strlen(Multi_fs_tracker_filter);
-	if((len > 0) && (len < CHANNEL_LEN-1) ){
+	if((len > 0) && (len < CHANNEL_LEN) ){
 		memset(&filter,0,sizeof(filter_game_list_struct));		
 
 		SDL_strlcpy(filter.channel, Multi_fs_tracker_filter, SDL_arraysize(filter.channel));
