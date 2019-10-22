@@ -56,6 +56,9 @@ unsigned int FirstGameOverPacket;
 int SendingGameOver;
 //End New 7-9-98
 
+// for mod detection
+extern short Multi_fs_tracker_game_id;
+
 
 static int SerializeGamePacket(const game_packet_header *gph, ubyte *data)
 {
@@ -63,6 +66,9 @@ static int SerializeGamePacket(const game_packet_header *gph, ubyte *data)
 
 	PXO_ADD_UINT(gph->len);
 	PXO_ADD_DATA(gph->game_type);
+
+	//PXO_ADD_SHORT(gph->game_id);	// not used except with fs2open, part of 'junk'
+	PXO_ADD_SHORT(Multi_fs_tracker_game_id);	// just set here instead of 15 other places
 
 	PXO_ADD_DATA(gph->junk); // not used, basically just padding for compatibility
 	PXO_ADD_INT(gph->type);
@@ -154,6 +160,7 @@ static void DeserializeGamePacket(const ubyte *data, const int data_size, game_p
 	PXO_GET_UINT(gph->len);
 	PXO_GET_DATA(gph->game_type);
 
+	PXO_GET_SHORT(gph->game_id);	// not used except with fs2open, part of 'junk'
 	PXO_GET_DATA(gph->junk); // not used, basically just padding for compatibility
 	PXO_GET_INT(gph->type);
 	PXO_GET_UINT(gph->sig);

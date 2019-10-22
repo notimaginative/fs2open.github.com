@@ -45,6 +45,9 @@ char Multi_fs_tracker_channel[MAX_PATH] = "";
 // channel to use when polling the tracker for games
 char Multi_fs_tracker_filter[MAX_PATH] = "";
 
+// used for mod detection
+short Multi_fs_tracker_game_id = -1;
+SCP_string Multi_fs_tracker_game_name;
 
 // -----------------------------------------------------------------------------------
 // FREESPACE MASTER TRACKER FORWARD DECLARATIONS
@@ -1275,11 +1278,17 @@ int multi_fs_tracker_validate_game_data()
 			if ( (rval == TVALID_STATUS_VALID) && (game_data_status == TVALID_STATUS_UNKNOWN) ) {
 				game_data_status = TVALID_STATUS_VALID;
 			}
-			// if anything is invalid then just be done
+			// continue processing after invalid for mod ident to fully work
 			else if (rval == TVALID_STATUS_INVALID) {
 				game_data_status = TVALID_STATUS_INVALID;
-				break;
 			}
+		}
+
+		// we should hopefully have a mod id now, so log it
+		if (Multi_fs_tracker_game_id < 0) {
+			ml_printf("PXO Game Ident => FAILED!");
+		} else {
+			ml_printf("PXO Game Ident => %d: %s", Multi_fs_tracker_game_id, Multi_fs_tracker_game_name.c_str());
 		}
 	}
 

@@ -60,6 +60,10 @@ int TableValidLastSent;
 // squad war response
 squad_war_response SquadWarValidateResponse;
 
+// for mod detection
+extern short Multi_fs_tracker_game_id;
+extern SCP_string Multi_fs_tracker_game_name;
+
 
 static int SerializeValidatePacket(const udp_packet_header *uph, ubyte *data)
 {
@@ -88,7 +92,6 @@ static int SerializeValidatePacket(const udp_packet_header *uph, ubyte *data)
 			break;
 		}
 
-		case UNT_VALID_FS2_MSN_REQ:
 		case UNT_VALID_MSN_REQ:
 		case UNT_VALID_TBL_REQ: {
 			vmt_validate_mission_req_struct *mis_req = (vmt_validate_mission_req_struct *)&uph->data;
@@ -173,11 +176,19 @@ static void DeserializeValidatePacket(const ubyte *data, const int data_size, ud
 		case UNT_CONTROL:
 		case UNT_CONTROL_VALIDATION:
 		case UNT_LOGIN_NO_AUTH:
-		case UNT_VALID_FS_MSN_RSP:
-		case UNT_VALID_FS2_MSN_RSP:
 		case UNT_VALID_MSN_RSP:
-		case UNT_VALID_TBL_RSP:
 			break;
+
+		case UNT_VALID_TBL_RSP: {
+			short game_id;
+
+			PXO_GET_SHORT(game_id);
+
+			memcpy(uph->data, &game_id, sizeof(short));
+			SDL_strlcpy((char *)(uph->data+sizeof(short)), (const char *)(data+offset), SDL_arraysize(uph->data) - sizeof(short));
+
+			break;
+		}
 
 		case UNT_LOGIN_AUTHENTICATED: {
 			SDL_strlcpy((char *)uph->data, (const char *)(data+offset), SDL_arraysize(uph->data));
@@ -319,6 +330,7 @@ int ValidateUser(validate_id_request *valid_id, char *trackerid)
 
 			//Build the request packet
 			PacketHeader.type = UNT_LOGIN_AUTH_REQUEST;
+			PacketHeader.xcode = (unsigned short)Multi_fs_tracker_game_id;
 			PacketHeader.len = PACKED_HEADER_ONLY_SIZE+sizeof(validate_id_request);
 			ValidIDReq=(validate_id_request *)&PacketHeader.data;
 			SDL_strlcpy(ValidIDReq->login, valid_id->login, SDL_arraysize(ValidIDReq->login));
@@ -398,13 +410,9 @@ void ValidIdle()
 						SDL_strlcpy(Psztracker_id, (const char *)&inpacket.data, TRACKER_ID_LEN);
 					}
 					break;
-				// old - this is a Freespace 1 packet type
-				case UNT_VALID_FS_MSN_RSP:
-					Int3();
-					break;
 
 				// fs2 mission validation response
-				case UNT_VALID_FS2_MSN_RSP:
+				case UNT_VALID_MSN_RSP:
 					if(MissionValidState == VALID_STATE_WAITING){
 						if(inpacket.code==2){
 							MissionValidState = VALID_STATE_VALID;
@@ -440,6 +448,17 @@ void ValidIdle()
 					if (TableValidState == VALID_STATE_WAITING) {
 						if (inpacket.code == 2) {
 							TableValidState = VALID_STATE_VALID;
+
+							if ((size_t)bytesin > PACKED_HEADER_ONLY_SIZE) {
+								short game_id = -1;
+
+								memcpy(&game_id, inpacket.data, sizeof(short));
+
+								if (game_id > Multi_fs_tracker_game_id) {
+									Multi_fs_tracker_game_id = game_id;
+									Multi_fs_tracker_game_name = (const char *)(inpacket.data+sizeof(short));
+								}
+							}
 						} else {
 							TableValidState = VALID_STATE_INVALID;
 						}
@@ -547,6 +566,7 @@ int ValidateMission(vmt_validate_mission_req_struct *valid_msn)
 		case VALID_STATE_INVALID:
 			MissionValidState = VALID_STATE_IDLE;
 			return -1;
+
 		case VALID_STATE_TIMEOUT:
 			MissionValidState = VALID_STATE_IDLE;
 			return -2;
@@ -579,7 +599,8 @@ int ValidateMission(vmt_validate_mission_req_struct *valid_msn)
 				FD_SET(Unreliable_socket, &read_fds);
 			}
 			//only send the header, the checksum and the string length plus the null
-			PacketHeader.type = UNT_VALID_FS2_MSN_REQ;
+			PacketHeader.type = UNT_VALID_MSN_REQ;
+			PacketHeader.xcode = (unsigned short)Multi_fs_tracker_game_id;
 			PacketHeader.len = (short)(PACKED_HEADER_ONLY_SIZE + sizeof(int)+1+strlen(valid_msn->file_name));
 			memcpy(PacketHeader.data,valid_msn,PacketHeader.len-PACKED_HEADER_ONLY_SIZE);
 			packet_length = SerializeValidatePacket(&PacketHeader, packet_data);
@@ -666,6 +687,7 @@ int ValidateSquadWar(squad_war_request *sw_req, squad_war_response *sw_resp)
 			}
 			// only send the header, the checksum and the string length plus the null
 			PacketHeader.type = UNT_VALID_SW_MSN_REQ;
+			PacketHeader.xcode = (unsigned short)Multi_fs_tracker_game_id;
 			PacketHeader.len = (short)(PACKED_HEADER_ONLY_SIZE + sizeof(squad_war_request));
 			memcpy(PacketHeader.data, sw_req, PacketHeader.len-PACKED_HEADER_ONLY_SIZE);
 			packet_length = SerializeValidatePacket(&PacketHeader, packet_data);
@@ -738,6 +760,7 @@ int ValidateTable(vmt_validate_mission_req_struct *valid_tbl)
 
 			//only send the header, the checksum and the string length plus the null
 			PacketHeader.type = UNT_VALID_TBL_REQ;
+			PacketHeader.xcode = (unsigned short)Multi_fs_tracker_game_id;
 			PacketHeader.len = (short)(PACKED_HEADER_ONLY_SIZE + sizeof(int)+1+strlen(valid_tbl->file_name));
 			memcpy(PacketHeader.data, valid_tbl, PacketHeader.len-PACKED_HEADER_ONLY_SIZE);
 			packet_length = SerializeValidatePacket(&PacketHeader, packet_data);

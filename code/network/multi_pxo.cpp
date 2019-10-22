@@ -1398,6 +1398,9 @@ void multi_pxo_do_normal()
 		// initialize the master tracker API for Freespace
 		multi_fs_tracker_init();
 
+		// validate game data first, for initial game/mod ident
+		multi_fs_tracker_validate_game_data();
+
 		// validate the current player with the master tracker (will create the pilot on the MT if necessary)
 		validate_code = multi_fs_tracker_validate(0);
 
@@ -1431,10 +1434,8 @@ void multi_pxo_do_normal()
 			Multi_pxo_must_connect = 0;
 			Multi_pxo_must_validate = 0;
 		}
-		// now validate game data, then we have to connect to PXO
-		else {			
-			multi_fs_tracker_validate_game_data();
-
+		// now we have to connect to PXO
+		else {
 			Multi_pxo_must_connect = 1;
 			Multi_pxo_must_validate = 0;
 		}

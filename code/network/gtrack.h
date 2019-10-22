@@ -54,7 +54,8 @@
 	typedef struct {
 		unsigned int len;				//Length of entire packet;
 		unsigned char game_type;	//1==freespace (GT_FREESPACE), 2==D3, 3==tuberacer, etc.
-		char junk[16];				// not used but need constant size for compatibility (SOCKADDR_IN	addr);
+		short game_id;				// only used for fs2open, otherwise is part of 16-byte junk space
+		char junk[14];				// not used but need constant size for compatibility (SOCKADDR_IN	addr); (originally 16-bytes!!)
 		int	type;	//Used to specify what to do ie. Add a new net game (GNT_GAMESTARTED), remove a net game (game over), etc.
 		unsigned int	sig;	//Unique identifier for client ACKs (The server always fills this in, the client responds)
 

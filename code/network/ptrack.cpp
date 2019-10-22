@@ -57,6 +57,9 @@ vmt_stats_struct *ReadFSPilot;
 // squad war response
 squad_war_response SquadWarWriteResponse;
 
+// for mod detection
+extern short Multi_fs_tracker_game_id;
+
 
 static int SerializePilotPacket(const udp_packet_header *uph, ubyte *data)
 {
@@ -387,6 +390,7 @@ int SendFSPilotData(vmt_stats_struct *fs_pilot)
 
 		fs_pilot_write.type = UNT_PILOT_DATA_WRITE_NEW;
 		fs_pilot_write.code = CMD_GAME_FS2OPEN;
+		fs_pilot_write.xcode = (unsigned short)Multi_fs_tracker_game_id;
 		fs_pilot_write.len = PACKED_HEADER_ONLY_SIZE+sizeof(vmt_stats_struct)-size_offset;
 		memcpy(&fs_pilot_write.data,fs_pilot,sizeof(vmt_stats_struct));
 
@@ -549,6 +553,7 @@ int GetFSPilotData(vmt_stats_struct *fs_pilot, const char *pilot_name, const cha
 		FSLastSent = 0;
 		FSFirstSent = timer_get_milliseconds();
 
+		fs_pilot_req.xcode = (unsigned short)Multi_fs_tracker_game_id;
 		fs_pilot_req.len = PACKED_HEADER_ONLY_SIZE+sizeof(pilot_request);
 
 		if(get_security){
