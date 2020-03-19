@@ -321,7 +321,7 @@ void multi_respawn_wing_stuff(ship *shipp)
 	hud_set_wingman_status_alive(shipp->wing_status_wing_index, shipp->wing_status_wing_pos);
 }
 
-int multi_respawn_common_stuff(p_object *pobjp)
+int multi_respawn_common_stuff(p_object *pobjp, ushort net_sig)
 {
 	int objnum, team, slot_index;
 	object *objp;
@@ -340,9 +340,7 @@ int multi_respawn_common_stuff(p_object *pobjp)
 	Assert( slot_index != -1 );
 
 	// reset object update stuff
-	for(idx=0; idx<MAX_PLAYERS; idx++){
-		shipp->np_updates[idx].update_stamp = -1;
-	}
+	multi_reset_oo_info(net_sig);
 
 	// change the ship type and the weapons
 	if (team != -1 && slot_index != -1) {
@@ -374,7 +372,7 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if(pobjp == NULL){
 		return;
 	}
-	objnum = multi_respawn_common_stuff(pobjp);
+	objnum = multi_respawn_common_stuff(pobjp, net_sig);
 
 	Assert( objnum != -1 );
 	objp = &Objects[objnum];
@@ -416,7 +414,7 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if(!(Net_player->flags & NETINFO_FLAG_AM_MASTER)){
 		objp->net_signature = net_sig;
 	}
-	
+
 	// restore the correct weapon bank selections
 	shipp->weapons.current_primary_bank = (int)cur_primary_bank;
 	shipp->weapons.current_secondary_bank = (int)cur_secondary_bank;
@@ -486,7 +484,7 @@ void multi_respawn_ai( p_object *pobjp )
 	object *objp;
 
 	// create the object and change the ship type
-	objnum = multi_respawn_common_stuff( pobjp );
+	objnum = multi_respawn_common_stuff( pobjp, pobjp->net_signature );
 	objp = &Objects[objnum];
 
 	// be sure the the OF_PLAYER_SHIP flag is unset, and the could be player flag is set

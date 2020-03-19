@@ -198,7 +198,7 @@ int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, vec3d *pos, ph
 
 // Packs/unpacks rotational velocity
 // Returns number of bytes read or written.
-int multi_pack_unpack_rotvel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi);
+int multi_pack_unpack_rotvel(int write, ubyte *data, physics_info *pi);
 
 char multi_unit_to_char(float unit);
 float multi_char_to_unit(float val);

@@ -83,6 +83,7 @@ extern int ascii_table[];
 extern int shifted_ascii_table[];
 
 extern int Multi_ping_timestamp;
+extern void multi_reset_oo_frame_info();
 
 // network object management
 ushort Next_ship_signature;										// next permanent network signature to assign to an object
@@ -703,7 +704,6 @@ void stuff_netplayer_info( net_player *nplayer, net_addr *addr, int ship_class, 
 void multi_assign_player_ship( int net_player_num, object *objp,int ship_class )
 {
 	ship *shipp;
-	int idx;
 
 	Assert ( MULTI_CONNECTED(Net_players[net_player_num]) );
 
@@ -732,9 +732,7 @@ void multi_assign_player_ship( int net_player_num, object *objp,int ship_class )
 	}
 
 	// zero update info	
-	for(idx=0; idx<MAX_PLAYERS; idx++){
-		shipp->np_updates[idx].update_stamp = -1;
-	}
+	multi_reset_oo_info(objp->net_signature);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -3444,6 +3442,8 @@ int bitbuffer_get_signed( bitbuffer *bitbuf, int bit_count )
 
 // Packs/unpacks an object position.
 // Returns number of bytes read or written.
+// Cyborg17 This packer saves 2 bytes over sending the whole vector.  
+// It now has a maximum effective range of ~130k in the x and z and ~65K in the y
 int multi_pack_unpack_position( int write, ubyte *data, vec3d *pos)
 {
 	bitbuffer buf;
@@ -3453,32 +3453,31 @@ int multi_pack_unpack_position( int write, ubyte *data, vec3d *pos)
 	int a, b, c;
 
 	if ( write )	{
+
 		// Output pos
-
-		a = (int)std::lround(pos->xyz.x*105.0f);
-		b = (int)std::lround(pos->xyz.y*105.0f);
-		c = (int)std::lround(pos->xyz.z*105.0f);
-		CAP(a,-8388608,8388607);
-		CAP(b,-8388608,8388607);
-		CAP(c,-8388608,8388607);
+		a = (int)round(pos->xyz.x*512.0f);
+		b = (int)round(pos->xyz.y*512.0f); 
+		c = (int)round(pos->xyz.z*512.0f);
+		CAP(a, -67108864, 67108863);		
+		CAP(b, -33554432, 33554431);		
+		CAP(c, -67108864, 67108863);		
 		
-		bitbuffer_put( &buf, (uint)a, 24 );
-		bitbuffer_put( &buf, (uint)b, 24 );
-		bitbuffer_put( &buf, (uint)c, 24 );
-
+		bitbuffer_put( &buf, (uint)a, 27 );
+		bitbuffer_put( &buf, (uint)b, 26 ); // Cyborg17 this is set to 26 bits on purpose.			
+		bitbuffer_put( &buf, (uint)c, 27 );
 
 		return bitbuffer_write_flush(&buf);
 
 	} else {
 
 		// unpack pos
-		a = bitbuffer_get_signed(&buf,24);
-		b = bitbuffer_get_signed(&buf,24);
-		c = bitbuffer_get_signed(&buf,24);
+		a = bitbuffer_get_signed(&buf,27);
+		b = bitbuffer_get_signed(&buf,26); // Cyborg17 this is set to 26 bits on purpose.
+		c = bitbuffer_get_signed(&buf,27);
 
-		pos->xyz.x = i2fl(a)/105.0f;
-		pos->xyz.y = i2fl(b)/105.0f;
-		pos->xyz.z = i2fl(c)/105.0f;
+		pos->xyz.x = i2fl(a)/512.0f;
+		pos->xyz.y = i2fl(b)/512.0f;
+		pos->xyz.z = i2fl(c)/512.0f;
 
 		return bitbuffer_read_flush(&buf);
 	}
@@ -3486,8 +3485,9 @@ int multi_pack_unpack_position( int write, ubyte *data, vec3d *pos)
 
 // Packs/unpacks an orientation matrix.
 // Returns number of bytes read or written.
-// Cyborg17 - Because of testing and a bugfix from Wookiejedi, this now is used in tandem with
-// vm_extract_angles_matrix() to save bandwidth. The raw angles are useful in rotational interpolation.
+// Cyborg17 - Because of testing and a bugfix from Wookiejedi, this is now used in tandem with
+// vm_extract_angles_matrix() to save bandwidth. We return the raw angles by reference
+// because they are also useful in rotational interpolation.
 int multi_pack_unpack_orient( int write, ubyte *data, angles *angles)
 {
 	bitbuffer buf;
@@ -3497,34 +3497,34 @@ int multi_pack_unpack_orient( int write, ubyte *data, angles *angles)
 	int a, b, c;
 
 	// set up some constants to facilitate compression 
-	const float n_scale = 4096.0f / PI;
-	const int n_min_range = -4096;
-	const int n_max_range =  4095;
+	const float n_scale = 32768.0f/ PI;
+	const int n_min_range = -32768;
+	const int n_max_range =  32767;
 
 	if ( write )	{			
 		// Subtract PI/2 because the output of vm_extract_angles_matrix is from -PI/2 to 3PI/2
-		a = fl2i((angles->b - PI/2) * n_scale); 
-		b = fl2i((angles->h - PI/2) * n_scale);
-		c = fl2i((angles->p - PI/2) * n_scale);
+		a = fl2i(round((angles->b/* - PI/2*/) * n_scale)); 
+		b = fl2i(round((angles->h/* - PI/2*/) * n_scale));
+		c = fl2i(round((angles->p/* - PI/2*/) * n_scale));
 
 		CAP(a, n_min_range, n_max_range);
 		CAP(b, n_min_range, n_max_range);
 		CAP(c, n_min_range, n_max_range);
 					
-		bitbuffer_put( &buf, (uint)a, 13 );
-		bitbuffer_put( &buf, (uint)b, 13 );
-		bitbuffer_put( &buf, (uint)c, 13 );
+		bitbuffer_put( &buf, (uint)a, 16 );
+		bitbuffer_put( &buf, (uint)b, 16 );
+		bitbuffer_put( &buf, (uint)c, 16 );
 
 		return bitbuffer_write_flush(&buf);
 	} else {
 
-		a = bitbuffer_get_signed(&buf,13);
-		b = bitbuffer_get_signed(&buf,13);
-		c = bitbuffer_get_signed(&buf,13);
+		a = bitbuffer_get_signed(&buf,16);
+		b = bitbuffer_get_signed(&buf,16);
+		c = bitbuffer_get_signed(&buf,16);
 
-		angles->b = PI/2 + (i2fl(a)/n_scale);
-		angles->h = PI/2 + (i2fl(b)/n_scale);
-		angles->p = PI/2 + (i2fl(c)/n_scale);
+		angles->b =/* PI/2 +*/ (i2fl(a)/n_scale);
+		angles->h =/* PI/2 +*/ (i2fl(b)/n_scale);
+		angles->p =/* PI/2 +*/ (i2fl(c)/n_scale);
 		
 		return bitbuffer_read_flush(&buf);
 	}
@@ -3547,9 +3547,10 @@ int multi_pack_unpack_vel( int write, ubyte *data, matrix *orient, vec3d * /*pos
 		u = vm_vec_dot( &orient->vec.uvec, &pi->vel );
 		f = vm_vec_dot( &orient->vec.fvec, &pi->vel );
 
-		a = fl2i(r * 4.0f); 
-		b = fl2i(u * 4.0f);
-		c = fl2i(f * 4.0f);
+		// Cyborg17 - using round here allows us keep part of the decimal accuracy that would have been dropped with just fl2i
+		a = fl2i(round(r * 4.0f)); 
+		b = fl2i(round(u * 4.0f));
+		c = fl2i(round(f * 4.0f));
 		CAP(a,-4096,4095);
 		CAP(b,-4096,4095);
 		CAP(c,-4096,4095);
@@ -3579,7 +3580,7 @@ int multi_pack_unpack_vel( int write, ubyte *data, matrix *orient, vec3d * /*pos
 
 // Packs/unpacks rotational velocity
 // Returns number of bytes read or written.
-int multi_pack_unpack_rotvel( int write, ubyte *data, matrix * /*orient*/, vec3d * /*pos*/, physics_info *pi)
+int multi_pack_unpack_rotvel( int write, ubyte *data, physics_info *pi)
 {
 	bitbuffer buf;
 
@@ -3589,9 +3590,9 @@ int multi_pack_unpack_rotvel( int write, ubyte *data, matrix * /*orient*/, vec3d
 
 	if ( write )	{
 		// output rotational velocity
-		a = fl2i(pi->rotvel.xyz.x*32.0f); 
-		b = fl2i(pi->rotvel.xyz.y*32.0f);
-		c = fl2i(pi->rotvel.xyz.z*32.0f);
+		a = fl2i(round(pi->rotvel.xyz.x*32.0f)); 
+		b = fl2i(round(pi->rotvel.xyz.y*32.0f));
+		c = fl2i(round(pi->rotvel.xyz.z*32.0f));
 		CAP(a,-512,511);
 		CAP(b,-512,511);
 		CAP(c,-512,511);

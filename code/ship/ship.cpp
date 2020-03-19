@@ -5964,11 +5964,6 @@ void ship::clear()
 	level2_tag_total = 0.0f;
 	level2_tag_left = -1.0f;
 
-	for (i = 0; i < MAX_PLAYERS; i++ )
-	{
-		np_updates[i].update_stamp = -1;
-	}
-
 	lightning_stamp = timestamp(-1);
 
 	// set awacs warning flags so awacs ship only asks for help once at each level
@@ -9605,7 +9600,7 @@ int ship_create(matrix* orient, vec3d* pos, int ship_type, const char* ship_name
 		entry->shipp = shipp;
 	}
 	
-	// If we're on a multi server, start up stracking for this in the Svr_frames struct.
+	// If we're on a multi server, start up stracking for this in the Frame_Record struct.
 	if (Game_mode & (GM_MULTIPLAYER | GM_IN_MISSION)) {
 		if (MULTIPLAYER_MASTER) {
 			multi_ship_record_add_ship_server(objnum);
@@ -10782,8 +10777,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	bool has_autoaim, has_converging_autoaim, needs_target_pos;	// used to flag weapon/ship as having autoaim
 	float autoaim_fov = 0;			// autoaim limit
 	float dist_to_target = 0;		// distance to target, for autoaim & automatic convergence
-	int weapon_objnums[12];			// store the weapon object_numbers as they are created to pass to multi functions
-	short weapon_objnum_x = 0;
 
 	gamesnd_id		sound_played;	// used to track what sound is played.  If the player is firing two banks
 										// of the same laser, we only want to play one sound
@@ -11444,8 +11437,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 							num_fired++;
 							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;
-							weapon_objnums[weapon_objnum_x] = weapon_objnum;
-							weapon_objnum_x++;							
+//							multi_ship_record_maybe_track_weapon(weapon_objnum);					
 						}
 					}
 					swp->external_model_fp_counter[bank_to_fire]++;
@@ -11527,12 +11519,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	if(Game_mode & GM_MULTIPLAYER){
 		// if I'm a Host send a primary fired packet packet
 		if(MULTIPLAYER_MASTER) {
-		send_NEW_primary_fired_packet(shipp, banks_fired, weapon_objnums[0]);
+		send_NEW_primary_fired_packet(shipp, banks_fired);
 		// or if I'm a client, and it is my ship send it for rollback on the server.
 		} else if (MULTIPLAYER_CLIENT && (shipp == Player_ship)) {
-			for (i = 0; i < weapon_objnum_x; i++) {
-				send_NEW_primary_fired_packet(shipp, banks_fired, weapon_objnums[i]);
-			}
+				send_NEW_primary_fired_packet(shipp, banks_fired);
 		}
 		 
 	}
