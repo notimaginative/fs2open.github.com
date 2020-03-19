@@ -1223,7 +1223,6 @@ void multi_do_frame()
 	// while in the mission, send my PlayerControls to the host so that he can process
 	// my movement
 	if ( Game_mode & GM_IN_MISSION ) {
-
 		if ( !(Net_player->flags & NETINFO_FLAG_AM_MASTER)){					
 			if(Net_player->flags & NETINFO_FLAG_OBSERVER){
 				// if the rate limiting system says its ok
@@ -1233,10 +1232,10 @@ void multi_do_frame()
 				}
 			} else if ( !(Player_ship->is_departing() ) ){
 				// if the rate limiting system says its ok
-				if(multi_oo_cirate_can_send()){
+//				if(multi_oo_cirate_can_send()){
 					// use the new method
-					multi_oo_send_control_info();
-				}				
+					multi_oo_send_control_info(); // Cyborg17 - Don't limit players updating themselves.
+//				}				
 			}
 
 			// bytes received info
@@ -1251,7 +1250,7 @@ void multi_do_frame()
 				// reset timestamp
 				Next_bytes_time = (int) time(NULL);				
 			}
-		} else {			
+		} else {
 			// sending new objects from here is dependent on having objects only created after
 			// the game is done moving the objects.  I think that I can enforce this.				
 			multi_oo_process();			
@@ -1304,7 +1303,7 @@ void multi_do_frame()
 	multi_fs_tracker_process();
 
 	// Cyborg17 update the new frame recording system for accurate client shots, can safely go after everything else in multi.
-	if (MULTIPLAYER_MASTER && (Game_mode & GM_IN_MISSION)) {
+	if (Game_mode & GM_IN_MISSION) {
 		multi_ship_record_increment_frame();
 	}
 

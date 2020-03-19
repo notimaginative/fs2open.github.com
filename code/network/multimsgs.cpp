@@ -3959,7 +3959,7 @@ void send_observer_update_packet()
 
 	angles temp_angles;
 
-	vm_extract_angles_matrix(&temp_angles, &Player_obj->orient);
+	vm_extract_angles_matrix_alternate(&temp_angles, &Player_obj->orient);
 	ret = multi_pack_unpack_orient( 1, data + packet_size, &temp_angles);
 
 	packet_size += ret;
@@ -7477,7 +7477,7 @@ void process_reinforcement_avail( ubyte *data, header *hinfo )
 	}
 }
 
-void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_num)
+void send_NEW_primary_fired_packet(ship* shipp, int banks_fired)
 {
 	int packet_size, objnum;
 	ubyte data[MAX_PACKET_SIZE]; // ubanks_fired, current_bank;
@@ -7491,15 +7491,15 @@ void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_
 	}
 
 	// Cyborg17 - new variables for physics calcs to send to server if client
-	vec3d temp_vec, ship_to_wep_vec;
-	matrix temp_transp_mat, wep_adjuster_mat;
+	vec3d temp_vec, ref_to_ship_vec;
+	matrix temp_transp_mat, ship_adjuster_mat;
 	float distance;
 	ushort last_received_frame, ref_obj_netsig, time_elapsed;
 	angles adjustment_angles;
 
 	// Cyborg17 - and corresponding pointers
-	vec3d* wep_pos, * ref_pos;
-	matrix* wep_ori, * ref_ori;
+	vec3d ship_pos, * ref_pos;
+	matrix ship_ori, * ref_ori;
 
 	// get an object pointer for this ship.
 	objnum = shipp->objnum;
@@ -7515,35 +7515,34 @@ void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_
 		// to my current target as well as the frametime.
 		// The whole goal of this is to create the weapon on the server that is
 		// heading at your target in the same exact way that it is on the client.
-
-		object* temp_objp = &Objects[Ships[multi_client_lookup_frame_ship_index()].objnum];
-		Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");
+		object* temp_objp = multi_get_network_object(multi_client_lookup_ref_obj_net_sig());
+		// Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");  //temp remove this because we need to test other things for now.
 		if (temp_objp == nullptr) {
+			mprintf(("Client is unable to get accurate reference object.\n"));
 			return;
 		}
 		ref_pos = &temp_objp->pos;
 		ref_ori = &temp_objp->orient;
 		ref_obj_netsig = temp_objp->net_signature;
 
-		wep_pos = &Objects[weapon_obj_num].pos;
-		wep_ori = &Objects[weapon_obj_num].orient;
+		ship_pos = objp->pos;
+		ship_ori = objp->orient;
 
 		// Find the vector between the two objects
-		vm_vec_sub(&ship_to_wep_vec, wep_pos, ref_pos);
-		// quickly store the distance for use on the server
-		distance = vm_vec_mag(&ship_to_wep_vec);
+		vm_vec_sub(&ref_to_ship_vec, &ship_pos, ref_pos);
+		// store the distance for use on the server
+		distance = vm_vec_mag(&ref_to_ship_vec);
 			
 		// Normalize and unrotate via transposed matrix
 		// Save the transposed matrix so that we can optimize and use it twice.
-		vm_vec_copy_normalize(&temp_vec, &ship_to_wep_vec);
+		vm_vec_copy_normalize(&temp_vec, &ref_to_ship_vec);
 		vm_copy_transpose(&temp_transp_mat, ref_ori);
-		
 
 		// This is an "unrotate", because the matrix has already been transposed.  
 		// This finalized the relative position we will send to the server. 
-		vm_vec_rotate(&ship_to_wep_vec, &temp_vec, &temp_transp_mat);
+		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &temp_transp_mat);
 
-		// To fully explain, in matrix multiplication....
+		// To fully explain, in matrix multiplication:
 		// A X B = C  Meaning orientation A put through orientation B gives orientation C
 		// To find B we must do: B = A^-1 X C
 		// The transposed matrix of A must be put through C.
@@ -7552,14 +7551,15 @@ void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_
 		// Our final matrix is the current weapon orientation.
 
 		// step 3, find the rotation matrix that would give us the same relative orientation on the server
-		vm_matrix_x_matrix(&wep_adjuster_mat, &temp_transp_mat, wep_ori);
+		vm_matrix_x_matrix(&ship_adjuster_mat, &temp_transp_mat, &ship_ori);
+		vm_orthogonalize_matrix(&ship_adjuster_mat);
 
 		// step 4, save on bandwidth by changing to... 
-		vm_extract_angles_matrix(&adjustment_angles, &wep_adjuster_mat);
+		vm_extract_angles_matrix_alternate(&adjustment_angles, &ship_adjuster_mat);
 
 		// And we need the time too, so send the last frame we got from the server and how much time has happened since then.
 		last_received_frame = multi_client_lookup_frame_idx();
-		time_elapsed = ushort(timestamp() - multi_client_lookup_frame_timestamp());
+		time_elapsed = ushort(timestamp() - multi_client_lookup_frame_timestamp() + multi_client_lookup_current_frametime());
 	}
 
 	if(MULTIPLAYER_MASTER){
@@ -7580,7 +7580,7 @@ void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_
 		ADD_FLOAT(distance);
 		ADD_USHORT(last_received_frame);
 		ADD_USHORT(time_elapsed);
-		ADD_VECTOR(ship_to_wep_vec);
+		ADD_VECTOR(ref_to_ship_vec);
 		ADD_FLOAT(adjustment_angles.b);
 		ADD_FLOAT(adjustment_angles.h);
 		ADD_FLOAT(adjustment_angles.p);
@@ -7589,9 +7589,9 @@ void send_NEW_primary_fired_packet(ship* shipp, int banks_fired, int weapon_obj_
 		static bool client_book = false;
 
 		if (client_book == false) {
+			mprintf(("Primary packet sent with following values:\n"));
 			mprintf(("Client Net_signature %d ref_obj_netsig %d Distance %f last_received_frame %d time_elapsed %d \n", objp->net_signature, ref_obj_netsig, distance, last_received_frame, time_elapsed));
-			mprintf(("Our outgoing ref angles are:\n"));
-			mprintf(("%f  %f  %f \n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
+			mprintf(("Our outgoing ref angles are: %f  %f  %f \n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
 			client_count++;
 			if (client_count == 25) {
 				client_book = true;
@@ -7656,8 +7656,8 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 		int frame, time_after_frame;
 		angles adjustment_angles;
 		
-		vec3d ship_to_wep_vec, new_wep_pos, new_tar_pos, temp_vec, wep_push_vec;
-		matrix new_wep_ori, new_tar_ori, adjust_wep_matrix, ship_to_wep_ori;
+		vec3d ref_to_ship_vec, new_ship_pos, new_tar_pos, temp_vec, wep_push_vec;
+		matrix new_ship_ori, new_tar_ori, adjust_ship_matrix, ref_to_ship_ori;
 		
 		//pointers
 		object* objp_ref;
@@ -7667,14 +7667,16 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 		GET_FLOAT(distance);
 		GET_USHORT(client_frame);
 		GET_USHORT(time_elapsed);
-		GET_VECTOR(ship_to_wep_vec);
+		GET_VECTOR(ref_to_ship_vec);
 		GET_FLOAT(adjustment_angles.b);
 		GET_FLOAT(adjustment_angles.h);
 		GET_FLOAT(adjustment_angles.p);
 
 		PACKET_SET_SIZE();
 
-		mprintf(("Server Net_signature %d ref_obj_netsig %d Distance %f last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, distance, client_frame, time_elapsed));
+		mprintf(("\nServer Net_signature %d ref_obj_netsig %d Distance %f last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, distance, client_frame, time_elapsed));
+		mprintf(("ref_to_ship_vec: %f %f %f\n", ref_to_ship_vec.xyz.x, ref_to_ship_vec.xyz.y, ref_to_ship_vec.xyz.z));
+		mprintf(("adjustment_angles: %f %f %f\n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
 
 		objp_ref = multi_get_network_object(target_ref);
 
@@ -7706,18 +7708,12 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 			static bool book = false;
 			static int count = 0;
 
-			if (book == false) {
-				mprintf(("Our angles are:\n"));
-				mprintf(("%f  %f  %f \n", adjustment_angles.b, adjustment_angles.h, adjustment_angles.p));
-			}
-
-			if (book == false) {
-				mprintf(("Our initial weapon position is : \n"));
-				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
-			}
+			int net_sig_idx = objp_ref->net_signature - 1;
 
 			// adjust time so that we can interpolate the position and orientation that was seen on the client.
 			time_after_frame = multi_ship_record_adjust_timestamp(client_frame, frame, time_elapsed);
+
+			mprintf(("Server determined time_after_frame: %d", time_after_frame));
 
 			Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
 
@@ -7727,19 +7723,19 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 				new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
 			} // but usually we'll have to interpolate to get an accurate shot. 
 			else {
-				multi_ship_record_interp_between_frames(&new_tar_pos, &new_tar_ori, objp_ref->net_signature, frame, time_after_frame);
+				multi_ship_record_interp_between_frames(&new_tar_pos, &new_tar_ori, net_sig_idx, frame, time_after_frame);
 			}
 			// TEMPORARY, let's just interpolate position for now so that we know that that works.  Then we can interpolate rotation separately later.
 			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
 
 
 			if (book == false) {
-				mprintf(("new_tar_pos is : \n"));
+				mprintf(("Our server recorded position is: \n"));
 				mprintf(("%f  %f  %f \n", new_tar_pos.xyz.x, new_tar_pos.xyz.y, new_tar_pos.xyz.z));	
 			}
 
 			if (book == false) {
-				mprintf(("Our incoming new_tar_ori is:\n"));
+				mprintf(("Our server recorded orientation is:\n"));
 				mprintf(("%f  %f  %f \n", new_tar_ori.vec.fvec.xyz.x, new_tar_ori.vec.fvec.xyz.y, new_tar_ori.vec.fvec.xyz.z));
 				mprintf(("%f  %f  %f \n", new_tar_ori.vec.rvec.xyz.x, new_tar_ori.vec.rvec.xyz.y, new_tar_ori.vec.rvec.xyz.z));
 				mprintf(("%f  %f  %f \n", new_tar_ori.vec.uvec.xyz.x, new_tar_ori.vec.uvec.xyz.y, new_tar_ori.vec.uvec.xyz.z));
@@ -7749,42 +7745,40 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 			// find out where the angle to the new primary fire should be, by
 			// rotating the vector
 
-			temp_vec = ship_to_wep_vec;
+			temp_vec = ref_to_ship_vec;
 
-			// figure out the new position for the wep.
-			vm_vec_rotate(&ship_to_wep_vec, &temp_vec, &new_tar_ori);
+			// figure out the new position for the firing ship.
+			vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
+
+			if (book == false) {
+				mprintf(("Normalized reference ship to target ship after world rotation is: \n"));
+				mprintf(("%f  %f  %f \n", ref_to_ship_vec.xyz.x, ref_to_ship_vec.xyz.y, ref_to_ship_vec.xyz.z));
+			}
+
 
 			// we need a version for the orientation and a version for the position.
 		//	vec3d wep_to_ship_vec = ship_to_wep_vec;
 
-			// Finish finding the weapon's starting position
-			vm_vec_scale(&ship_to_wep_vec, distance);
-			vm_vec_add(&new_wep_pos, &ship_to_wep_vec, &new_tar_pos);
+			// Finish finding the shot's starting position
+			vm_vec_scale(&ref_to_ship_vec, distance);			
+			vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
 
 			// now actually make the weapon to ship vec a weapon to ship vector.
 		//	vm_vec_scale(&wep_to_ship_vec, -1.0f);
 
 			// figure out what the orientation of the ship_to_wep_vec is so that we can adjust the weapon orientation back in
 		//	vm_vec_ang_2_matrix(&ship_to_wep_ori, &wep_to_ship_vec, 0.0f);
-		
-
-
-			if (book == false) {
-				mprintf(("ship_to_wep_vec after rotation is: \n"));
-				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
-			}
-
 
 			if (book == false) {
 				mprintf(("ship_to_wep_vec after scaling is: \n"));
-				mprintf(("%f  %f  %f \n", ship_to_wep_vec.xyz.x, ship_to_wep_vec.xyz.y, ship_to_wep_vec.xyz.z));
+				mprintf(("%f  %f  %f \n", ref_to_ship_vec.xyz.x, ref_to_ship_vec.xyz.y, ref_to_ship_vec.xyz.z));
 			}
 
 
 
 			if (book == false) {
 				mprintf(("So we decided the new wep position, before rollback is: \n"));
-				mprintf(("%f  %f  %f \n", new_wep_pos.xyz.x, new_wep_pos.xyz.y, new_wep_pos.xyz.z));
+				mprintf(("%f  %f  %f \n", new_ship_pos.xyz.x, new_ship_pos.xyz.y, new_ship_pos.xyz.z));
 			}
 
 //			if (book == false) {
@@ -7795,17 +7789,28 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 //			}
 
 			// "decompress" the orientation matrix from the packet's angles.
-			vm_angles_2_matrix(&adjust_wep_matrix, &adjustment_angles);
+			vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
 
 			if (book == false) {
 				mprintf(("Our adjusted wep matrix is: \n"));
-				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.fvec.xyz.x, adjust_wep_matrix.vec.fvec.xyz.y, adjust_wep_matrix.vec.fvec.xyz.z));
-				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.rvec.xyz.x, adjust_wep_matrix.vec.rvec.xyz.y, adjust_wep_matrix.vec.rvec.xyz.z));
-				mprintf(("%f  %f  %f \n", adjust_wep_matrix.vec.uvec.xyz.x, adjust_wep_matrix.vec.uvec.xyz.y, adjust_wep_matrix.vec.uvec.xyz.z));
+				mprintf(("%f  %f  %f \n", adjust_ship_matrix.vec.fvec.xyz.x, adjust_ship_matrix.vec.fvec.xyz.y, adjust_ship_matrix.vec.fvec.xyz.z));
+				mprintf(("%f  %f  %f \n", adjust_ship_matrix.vec.rvec.xyz.x, adjust_ship_matrix.vec.rvec.xyz.y, adjust_ship_matrix.vec.rvec.xyz.z));
+				mprintf(("%f  %f  %f \n", adjust_ship_matrix.vec.uvec.xyz.x, adjust_ship_matrix.vec.uvec.xyz.y, adjust_ship_matrix.vec.uvec.xyz.z));
 			}
 
 			// Now multiply the two matrices for the orientation of the weapon.
-			vm_matrix_x_matrix(&new_wep_ori, &ship_to_wep_ori, &adjust_wep_matrix);
+			vm_matrix_x_matrix(&new_ship_ori, &ref_to_ship_ori, &adjust_ship_matrix);
+
+			// set up the temporary push back to create the weapon in the right place.
+			vec3d hold_ship_pos = objp->pos;
+			matrix hold_ship_ori = objp->orient;
+
+
+			objp->pos = new_ship_pos;
+
+			multi_oo_set_rollback_mode(true);
+
+			ship_fire_primary(objp, 0, 1);
 
 			// now we need to push the weapon forward based on how much time went by.
 			ship_weapon* swp = &Ships[objp->instance].weapons;
@@ -7822,7 +7827,7 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 			}
 
 			// do the actual vector calcs of pushing the weapon forward
-			vm_matrix_to_rot_axis_and_angle(&new_wep_ori, &wep_ori_theta, &wep_push_vec);
+			vm_matrix_to_rot_axis_and_angle(&new_ship_ori, &wep_ori_theta, &wep_push_vec);
 
 			vm_vec_scale(&wep_push_vec, distance);
 
@@ -7832,29 +7837,33 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 			}
 
 			// until we've figured out the correct factor to multiply by.  Leave this out.
-			vm_vec_add2(&new_wep_pos, &wep_push_vec);
+			vm_vec_add2(&new_ship_pos, &wep_push_vec);
 
 			// create new weapon instance directly, instead of through ship_fire_primary, because we need to use
 			// the exact orientation from the client's calculations
 			// TODO: this artificially accidentally extends the primary weapon's range.  A proper fix firing
 			// would reduce the range slightly.
-			if (weapon_create(&new_wep_pos, &new_wep_ori, swp->primary_bank_weapons[swp->current_primary_bank],
+			if (weapon_create(&new_ship_pos, &new_ship_ori, swp->primary_bank_weapons[swp->current_primary_bank],
 				 OBJ_INDEX(objp)) == -1) {
 				mprintf(("WEAPON IS NOT BEING CREATED EVEN THOUGH WE ARE REQUESTING IT! \n"));
 			}
 			if (book == false) {
 				mprintf(("So our final new weapon position is : \n"));
-				mprintf(("%f  %f  %f \n", new_wep_pos.xyz.x, new_wep_pos.xyz.y, new_wep_pos.xyz.z));
+				mprintf(("%f  %f  %f \n", new_ship_pos.xyz.x, new_ship_pos.xyz.y, new_ship_pos.xyz.z));
 
 				mprintf(("Our weapon orientation is : \n"));
-				mprintf(("%f  %f  %f \n", new_wep_ori.vec.fvec.xyz.x, new_wep_ori.vec.fvec.xyz.y, new_wep_ori.vec.fvec.xyz.z));
-				mprintf(("%f  %f  %f \n", new_wep_ori.vec.rvec.xyz.x, new_wep_ori.vec.rvec.xyz.y, new_wep_ori.vec.rvec.xyz.z));
-				mprintf(("%f  %f  %f \n", new_wep_ori.vec.uvec.xyz.x, new_wep_ori.vec.uvec.xyz.y, new_wep_ori.vec.uvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_ship_ori.vec.fvec.xyz.x, new_ship_ori.vec.fvec.xyz.y, new_ship_ori.vec.fvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_ship_ori.vec.rvec.xyz.x, new_ship_ori.vec.rvec.xyz.y, new_ship_ori.vec.rvec.xyz.z));
+				mprintf(("%f  %f  %f \n", new_ship_ori.vec.uvec.xyz.x, new_ship_ori.vec.uvec.xyz.y, new_ship_ori.vec.uvec.xyz.z));
 				count++;
 				if (count == 20) {
 					book = true;
 				}
 			}
+
+			// finally unset rollback mode.
+			multi_oo_set_rollback_mode(false);
+
 		} else {
 		// if the new way fails for some reason, use the old way.
 			mprintf(("New primary shot system failed because frame was -1.\n"));
