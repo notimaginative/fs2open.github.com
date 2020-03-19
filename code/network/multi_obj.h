@@ -22,6 +22,7 @@ class object;
 struct header;
 struct net_player;
 class ship;
+struct physics_info;
 
 
 // client button info flags
@@ -38,11 +39,6 @@ class ship;
 // Cyborg17, Server will be tracking the last two seconds of frames
 #define MAX_FRAMES_RECORDED		240
 #define PRIMARY_PACKET_CUTOFF			2000
-
-// update info
-typedef struct np_update {	
-	int		update_stamp;				// global update stamp
-} np_update;
 
 // ---------------------------------------------------------------------------------------------------
 // POSITION AND ORIENTATION RECORDING
@@ -89,6 +85,12 @@ void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_o
 
 // ULTIMATE TODO, write new function that manages collision detection for inbetween frames.
 
+// Set multi to rollback mode.
+void multi_oo_set_rollback_mode(bool enable = false);
+
+// Lookup whether rollback mode is on
+bool multi_ship_record_lookup_rollback_mode();
+
 // Clear all from tracking struct
 void multi_ship_record_clear_all();
 
@@ -103,13 +105,19 @@ void multi_ship_record_add_ship_client(int obj_num);
 void multi_ship_record_rank_seq_num(object* objp, ushort seq_num);
 
 // Quick lookup for the most recently received frame
-ushort multi_client_lookup_frame_ship_index();
+ushort multi_client_lookup_ref_obj_net_sig();
 
 // Quick lookup for the most recently received frame
 ushort multi_client_lookup_frame_idx();
 
 // Quick lookup for the most recently received timestamp.
 int multi_client_lookup_frame_timestamp();
+
+// Quick lookup for the most recent received frametime from the server.
+int multi_client_lookup_current_frametime();
+
+// reset all the necessary info for respawning player.
+void multi_reset_oo_info(ushort net_sig);
 
 // ---------------------------------------------------------------------------------------------------
 // OBJECT UPDATE FUNCTIONS
@@ -129,7 +137,7 @@ void multi_oo_send_control_info();
 void multi_oo_send_changed_object(object *changedobj);
 
 // helper function that updates all interpolation info for a specific ship from a packet
-void multi_oo_maybe_update_interp_info(int idx, vec3d* pos, angles* ori_angles, bool adjust_pos, bool newest_pos, bool adjust_ori, bool newest_ori);
+void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new_ori_angles, matrix* new_ori_mat, physics_info* new_phys_info, bool adjust_pos, bool newest_pos);
 
 // reset all sequencing info
 void multi_oo_reset_sequencing();
@@ -140,7 +148,8 @@ int multi_oo_is_interp_object(object *objp);
 // interp position and orientation
 void multi_oo_interp(object *objp);
 
-int multi_oo_calc_pos_time_difference(int net_sig_idx);
+// recalculate how much time is between position packets
+float multi_oo_calc_pos_time_difference(int net_sig_idx);
 
 // Cyborg17 - sort through subsystems to make sure we only update the ones we need to update.
 //int multi_pack_required_subsytems(ship* shipp, ubyte* data, int packet_size, int header_bytes);
