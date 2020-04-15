@@ -23,6 +23,7 @@ struct header;
 struct net_player;
 class ship;
 struct physics_info;
+struct weapon;
 
 
 // client button info flags
@@ -46,7 +47,7 @@ struct physics_info;
 // This section is almost all server side
 
 // Add a new ship *ON IN-GAME SHIP CREATION* to the tracking struct
-void multi_ship_record_add_ship_server(int obj_num, bool in_mission = true);
+void multi_ship_record_add_ship(int obj_num);
 
 // Mark when a ship died or departed....
 void multi_ship_record_mark_as_dead_or_departed(int shipnum);
@@ -78,28 +79,28 @@ matrix multi_ship_record_lookup_orientation(object* objp, int frame);
 // quickly lookup how much time has passed since the given frame.
 uint multi_ship_record_get_time_elapsed(ushort original_frame);
 
-int multi_ship_record_adjust_timestamp(int client_frame, int frame, int time_elapsed);
+int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
 // find the exact point on the server that the client sees by interpolating 
-void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_ori, int shipnum, ushort original_frame, int time_elapsed);
+void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_ori, int net_sig_idx, ushort original_frame, int time_elapsed);
 
 // ULTIMATE TODO, write new function that manages collision detection for inbetween frames.
 
+// Creates a weapon and adds it to the Frame Records so that we can  
+void multi_ship_record_create_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame);
+
 // Set multi to rollback mode.
-void multi_oo_set_rollback_mode(bool enable = false);
+void multi_ship_record_set_rollback_wep_mode(bool enable);
 
 // Lookup whether rollback mode is on
-bool multi_ship_record_lookup_rollback_mode();
+bool multi_ship_record_get_rollback_wep_mode();
 
-// Clear all from tracking struct
-void multi_ship_record_clear_all();
+// Adds a weapon to the rollback tracker.
+void multi_ship_record_add_rollback_wep(int wep_objnum);
 
 // ---------------------------------------------------------------------------------------------------
 // Client side frame tracking, for now used only to help lookup info from packets to improve client accuracy.
 // 
-
-// For 
-void multi_ship_record_add_ship_client(int obj_num);
 
 // See if a newly arrived packet is a good new option as a reference object
 void multi_ship_record_rank_seq_num(object* objp, ushort seq_num);
@@ -130,7 +131,7 @@ void multi_oo_process();
 void multi_oo_process_update(ubyte *data, header *hinfo);
 
 // initialize all object update timestamps (call whenever entering gameplay state)
-void multi_oo_gameplay_init();
+void multi_oo_ship_tracker_init();
 
 // send control info for a client (which is basically a "reverse" object update)
 void multi_oo_send_control_info();

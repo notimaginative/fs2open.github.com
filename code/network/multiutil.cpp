@@ -83,7 +83,6 @@ extern int ascii_table[];
 extern int shifted_ascii_table[];
 
 extern int Multi_ping_timestamp;
-extern void multi_reset_oo_frame_info();
 
 // network object management
 ushort Next_ship_signature;										// next permanent network signature to assign to an object

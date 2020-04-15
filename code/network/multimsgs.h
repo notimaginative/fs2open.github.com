@@ -478,8 +478,8 @@ void send_reinforcement_avail( int rnum );
 void process_reinforcement_avail( ubyte *data, header *hinfo );
 
 // new primary fired info
-void send_NEW_primary_fired_packet(ship *shipp, int banks_fired);
-void process_NEW_primary_fired_packet(ubyte *data, header *hinfo);
+void send_non_homing_fired_packet(ship *shipp, int banks_fired);
+void process_non_homing_fired_packet(ubyte *data, header *hinfo);
 
 // new countermeasure fired info
 void send_NEW_countermeasure_fired_packet(object *objp, int cmeasure_count, int rand_val);
