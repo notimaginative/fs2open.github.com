@@ -943,6 +943,7 @@ void game_level_init()
 	NavSystem_Init();				// zero out the nav system
 
 	ai_level_init();				//	Call this before ship_init() because it reads ai.tbl.
+	multi_oo_ship_tracker_init();	// Inits/resets multiplayer ship tracking system.  Has to be done before creating any ships.
 	ship_level_init();
 	player_level_init();
 	shipfx_flash_init();			// Init the ship gun flash system.
@@ -5621,11 +5622,6 @@ void mouse_force_pos(int x, int y);
 			if ( (Game_mode & GM_MULTIPLAYER) && (old_state == GS_STATE_MULTI_PAUSED) ){
 				multi_reset_timestamps();
 			}
-
-			// initialize all object update details
-			if (((Game_mode & GM_MULTIPLAYER) || (Game_mode & GM_STANDALONE_SERVER)) && (old_state != GS_STATE_DEATH_BLEW_UP) && (old_state != GS_STATE_MULTI_PAUSED)) {
-				multi_oo_gameplay_init();
-			}
 	
 			// under certain circumstances, the server should reset the object update rate limiting stuff
 			if( MULTIPLAYER_MASTER && ((old_state == GS_STATE_MULTI_PAUSED) || (old_state == GS_STATE_MULTI_MISSION_SYNC)) ){
@@ -6488,7 +6484,6 @@ void game_shutdown(void)
 
 	// load up common multiplayer icons
 	multi_unload_common_icons();
-	multi_ship_record_clear_all();	// free multi ship position/orientation tracking system
 	hud_close();	
 	fireball_close();				// free fireball system
 	particle::close();			// close out the particle system
