@@ -30,67 +30,47 @@
 #include "ship/afterburner.h"
 #include "cfile/cfile.h"
 #include "debugconsole/console.h"
-
+#include "weapon/weapon.h"
 
 // ---------------------------------------------------------------------------------------------------
 // OBJECT UPDATE STRUCTS
 // 
 
+extern const std::uint32_t MAX_TIME;
+
 // One frame record per ship.
-struct multi_frame_records {
+struct oo_ship_position_records {
 
 	int initial_frame;												// to keep track of when each ship was added to the struct, as compared to total frames.           
 	int death_or_depart_frame;										// to keep track of when a ship's info should no longer be trusted for interpolation
 
 	vec3d positions[MAX_FRAMES_RECORDED];							// The recorded ship positions 
 	matrix orientations[MAX_FRAMES_RECORDED];						// The recorded ship orientations 
-	vec3d rotational_velocities[MAX_FRAMES_RECORDED];				// The recorded rotational velocities, used in interpolation.
-
 };
 
-struct oo_info_sent_to_player {
-	int timestamp;			// The timestamp that FSO uses to decide if a new packet should be sent
+struct oo_info_sent_to_players {
+	
+	int timestamp;					// The timestamp which is used to decide if a new packet should be sent to this player for this ship.
 
-	vec3d position;			// If they are stationary, there's no need to update their position.
-	vec3d rot_vel;			// If their rotation is not accelerating, no need to update their rotation.
-	float hull;
+	vec3d position;					// If they are stationary, there's no need to update their position.
+	float hull;						// no need to send hull if hull hasn't changed.
+
+	// shields are a little special because they are constantly regenerating, so if they are not at full strength we need to send them.
+	bool perfect_shields_sent;		
+
 	int ai_mode;
 	int ai_submode;
 	int target_signature;
 
-	bool perfect_shields_sent;		// if the last packet sent perfect shields, we may not need to send them again.
-	SCP_vector<float> subsystems;	// See if *any* of the subsystems changed, so we have to allow for a variable number of subsystems within a variable number of ships.
+	SCP_vector<float> subsystems;	// We have to keep track of all subsystems.
 };
 
-struct multi_player_records{
-	SCP_vector<oo_info_sent_to_player> last_sent;			// Subcategory of which player did I send this info to?  Corresponds to net_player indeces.
-	ushort target_records[MAX_FRAMES_RECORDED];				// records the net_signature of each net player per frame. 
+struct oo_netplayer_records{
+	SCP_vector<oo_info_sent_to_players> last_sent;			// Subcategory of which player did I send this info to?  Corresponds to net_player indeces.
 };
 
-// Struct for keeping track of *all* server record info.
-// The frame record wraps to keep from using too much memory or CPU 
-struct multi_oo_frame_tracker_info {
-	int number_of_frames;									// how many frames have we gone through, total.
-	ubyte wrap_count;										// how many times have we wrapped?  Just the smaller type.
-	short larger_wrap_count;
-	ubyte cur_idx;											// the current frame index (to access most of the temporarily recorded info)
-
-	ubyte frame_timestamp_count;							// counts the number of times the timestamp has been sent to the client. 
-	int timestamps[MAX_FRAMES_RECORDED];					// The timestamp for the given frame
-	SCP_vector<multi_frame_records> frame_info;				// Actually keeps track of ship physics info on the server.  Uses net_signature as its index.
-	SCP_vector<multi_player_records> player_frame_info;		// keeps track of player targets and what has been sent to each player.
-
-	// rollback info
-	bool rollback_create_mode;										// are we currently creating and moving weapons from the client primary fire packets
-	SCP_vector<int> rollback_weapon_objnums;						// a list of the weapons that were created, so that we can roll them into the current simulation
-};
-
-multi_oo_frame_tracker_info Frame_Record;				// All online object information for the server
-
-// ---------------------------------------------------------------------------------------------------
-// Tracking Received info and timing
-
-typedef struct interp_message_tracking {
+// Tracking Received info and timing per ship
+struct oo_packet_and_interp_tracking {
 	// arrival frame numbers 
 	int cur_pack_pos_frame;				// the last position packet arrival frame
 	int prev_pack_pos_frame;			// the prev position packet arrival frame
@@ -98,16 +78,15 @@ typedef struct interp_message_tracking {
 	bool client_simulation_mode;		// if the packets come in too late, a toggle to sim things like normal
 
 	// interpolation 
-	// mode adjustments - Like, if we stopped 
-	bool prev_packet_no_pos;			// a flag that marks if the last packet as having no new position or orientation info.
+	bool prev_packet_positionless;			// a flag that marks if the last packet as having no new position or orientation info.
 
 	float pos_time_delta;				// How much time passed between position packets.
 	int pos_timestamp;					// Time that FSO processes the most recent position packet
-	vec3d old_points;					// The last packet's pos
-	vec3d new_points;					// The current packet's pos
-	vec3d position_error;				// Position error that is gradually removed 
+	vec3d old_packet_position;			// The last packet's pos
+	vec3d new_packet_position;			// The current packet's pos
+	vec3d position_error;				// Position error that is removed over a few frames
 
-	int angles_time_delta;				// How much time passed between orientation packets.
+	float angles_time_delta;				// How much time passed between orientation packets.
 	angles old_angles;					// The last packet's orientation (in angles)
 	angles new_angles;					// The current packet's orientation (in angles)
 	angles anticipated_angles_a;		// What angles we expect the ship to eventually go to based on physics info.
@@ -115,9 +94,6 @@ typedef struct interp_message_tracking {
 	angles anticipated_angles_c;		// Further along than angles_b
 	angles orientation_error;			// Orientation error that is gradually removed. NOTE: not yet implemented, may not need to be.
 	matrix new_orientation;				// The new angles transferred to the new orientation.
-	matrix new_orientation_a;
-	matrix new_orientation_b;
-	matrix new_orientation_c;
 
 	bez_spline pos_spline;				// Points set for positional interpolation.
 
@@ -127,23 +103,21 @@ typedef struct interp_message_tracking {
 	vec3d cur_pack_local_des_vel;		// local velocity is in global coordinates, but having to go back and forth is a pain.
 	vec3d cur_pack_des_rot_vel;
 	int cur_pack_ai_mode;
-	int cur_pack_ai_submode;
+	int cur_pack_ai_submode;			// TODO: Find a place to bash this, like the rest
 
 	// Frame numbers that helps us figure out if we should ignore new information coming from the server because
 	// we already received a newer packet than this one.
 	bool odd_wrap;
 	int most_recent_packet;
-	int minimum_packet;
-	int rot_vel_frame;
 	int hull_frame;
 	int shields_frame;
 	SCP_vector<int> subsystems_frame;
 	int ai_frame;
 
-} interp_message_tracking;
+};
 
-// our struct for keeping track of incoming object update information.
-typedef struct oo_general{
+// our struct for keeping track of all interpolation and oo packet info.
+struct oo_general_info{
 
 	// info that helps us figure out what is the best reference object available.
 	// We go by what is the most recent packet received, and then by distance.
@@ -156,13 +130,28 @@ typedef struct oo_general{
 	// The previously received frametimes.  One entry for *every* frame, received or not, up to the last received frame.
 	SCP_vector<ubyte> received_frametimes;
 
-	// Client tracking of interp info and last received data.  One entry for every ship.
-	SCP_vector<interp_message_tracking> interp;
 
+	// Frame tracking info.
+	int number_of_frames;									// how many frames have we gone through, total.
+	ubyte wrap_count;										// how many times have we wrapped?  Just the smaller type.
+	short larger_wrap_count;
+	ubyte cur_frame_index;									// the current frame index (to access most of the temporarily recorded info)
 
-} oo_general;
+	ubyte frame_timestamp_count;							// counts the number of times the timestamp has been sent to the client. 
+	int timestamps[MAX_FRAMES_RECORDED];					// The timestamp for the given frame
+	SCP_vector<oo_ship_position_records> frame_info;		// Actually keeps track of ship physics info on the server.  Uses net_signature - 1 as its index.
+	SCP_vector<oo_netplayer_records> player_frame_info;		// keeps track of player targets and what has been sent to each player. Uses player as the index
 
-oo_general Oo_info;
+	// Tracking Received info and interpolation timing per ship 
+	SCP_vector<oo_packet_and_interp_tracking> interp;		// uses net_signature - 1 as its index.
+
+	// rollback info
+	bool rollback_mode;										// are we currently creating and moving weapons from the client primary fire packets
+	SCP_vector<object*> rollback_wobjp;						// a list of the weapons that were created, so that we can roll them into the current simulation
+
+};
+
+oo_general_info Oo_info;
 
 // flags
 bool Afterburn_hack = false;			// HACK!!!
@@ -281,7 +270,7 @@ int Multi_oo_rear_far_update_times[MAX_OBJ_UPDATE_LEVELS] =
 // ship index list for possibly sorting ships based upon distance, etc
 short OO_ship_index[MAX_SHIPS];
 
-// Cyborg17 - I'm leaving this system in place, just in case. Just know it needs cleanup in keycontrol.cpp before it can be used.
+// Cyborg17 - I'm leaving this system in place, just in case. It needs cleanup in keycontrol.cpp before it can be used.
 int OO_update_index = -1;							// The player index that allows us to look up multi rate through the debug
 													//  console and display it on the hud.
 
@@ -296,82 +285,116 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 // server that and the server will rewind part of its simulation to recreate that shot.
 // ---------------------------------------------------------------------------------------------------
 
-// Server Only - Add a new object on *ship creation* to the tracking struct
-void multi_ship_record_add_ship_server(int obj_num, bool in_mission)
+// Add a new object on *ship creation* to the tracking struct
+// TODO: FIX in_mission
+void multi_ship_record_add_ship(int obj_num)
 {
+	mprintf(("I'm the last one to run! 1\n"));
 	mprintf(("Ship added to server record struct.\n"));
-	Assertion(MULTIPLAYER_MASTER, "Non-server accessed a server only function. Please report!!");
-
-	if (!MULTIPLAYER_MASTER) {
-		return;
-	}
 
 	object* objp = &Objects[obj_num];
+	int net_sig_idx = objp->net_signature;
 
 	// check for a ship that will enter the mission later on and has not yet had its net_signature set.
-	if (objp->net_signature == 0) {
+	if (net_sig_idx == 0) {
+		mprintf(("THIS SHIP SHOULD NOT BE IN THIS SHIP ADDING FUNCTION! No net sig....\n")); // this could be the cause of the crash.
 		return;
 	}
 
 	// our target size is the number of ships in the vector plus one because net_signatures start at 1 and size gives the number of elements, and this should be a new element.
-	int target_size = (int)Frame_Record.frame_info.size() + 1;
+	int current_size = (int)Oo_info.frame_info.size();
 
-//	mprintf(("The object adder says that the target size is %d and the incoming net_signature is %d\n", target_size, objp->net_signature));	
+	mprintf(("The object adder says that the target size is %d and the incoming net_signature is %d\n", current_size, net_sig_idx));	
 
 	// if we're right where we should be.
-	if (objp->net_signature == target_size) {
-//		mprintf(("Server tracker believes object signature is right on target.\n"));
-		Frame_Record.frame_info.push_back(*new(multi_frame_records));		
+	if (net_sig_idx == current_size) {
+		mprintf(("Server tracker believes object signature is right on target.\n"));
+		Oo_info.frame_info.push_back(Oo_info.frame_info[0]);
+		Oo_info.interp.push_back(Oo_info.interp[0]);
+		for (int i = 0; i < MAX_PLAYERS; i++) {
+			Oo_info.player_frame_info[i].last_sent.push_back( Oo_info.player_frame_info[i].last_sent[0] );
+		}
 
-	}	// if the storage already exists.
-	else if (objp->net_signature < (target_size)) {
-//		mprintf(("Server tracker belives that the object already had storage available. No storage added.\n"));
+	}	// if the storage already exists because some other ship with ahigher net_signature was created first.
+	else if (net_sig_idx < current_size) {
+		mprintf(("Server tracker belives that the object already had storage available. No storage added.\n"));
 
 	}	// if not, create the storage.
-	else if (objp->net_signature > (target_size)) {
-//		mprintf(("Server tracker belives that the object is way past the storage available..\n"));
-		Frame_Record.frame_info.push_back(*new(multi_frame_records));
-
+	else if (net_sig_idx > current_size) {
+		mprintf(("Server tracker belives that the object is way past the storage available..\n"));
+		while (net_sig_idx >= current_size) {
+			Oo_info.frame_info.push_back(Oo_info.frame_info[0]);
+			Oo_info.interp.push_back(Oo_info.interp[0]);
+			for (int i = 0; i < MAX_PLAYERS; i++) {
+				Oo_info.player_frame_info[i].last_sent.push_back( Oo_info.player_frame_info[i].last_sent[0] );
+			}
+			current_size++;
+		}
+		mprintf(("Now the current size is %d\n", current_size));
 	} // and if I missed something.
-	else {
-//		mprintf(("Some sort of logic was misssed in the object adder function.\n"));
-	}
-	// Have this ready for later when we're sure that it works correctly at least most of the time.
-//	Assertion(objp->net_signature == target_size, "New entry into the ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and target_size %d\n", objp->net_signature, target_size);
 
-// net_signature is 1 indexed, so we have to adjust to correctly access info the vector.
-	int net_sig_idx = objp->net_signature - 1;
+	  // Have this ready for later when we're sure that it works correctly at least most of the time.
+	Assertion(net_sig_idx <= (current_size + 1), "New entry into the ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and current_size %d\n", net_sig_idx, current_size);
+	mprintf(("Past the assertion i..\n"));
+
+	
+
+	ship_info* sip = &Ship_info[Ships[objp->instance].ship_info_index];
+	mprintf(("Past the assertion ii..\n"));
+
+
+	// To use vectors for the subsystems, we have to init the subsystem tracking vectors here.
+	int subsystem_count = sip->n_subsystems;
+	mprintf(("Past the assertion iii..\n"));
+
+	while (Oo_info.interp[net_sig_idx].subsystems_frame.size() < subsystem_count) {
+		mprintf(("phrase1..\n"));
+
+		Oo_info.interp[net_sig_idx].subsystems_frame.push_back(-1);
+		mprintf(("phrase2..\n"));
+
+		for (int i = 0; i < MAX_PLAYERS; i++) {
+			mprintf(("phrase3.. size is of player indexed struct is "));
+			mprintf((" %d size of last sent size is", (int)Oo_info.player_frame_info.size()));
+			mprintf((" %d ", (int)Oo_info.player_frame_info[i].last_sent.size()));
+			mprintf(("size of subsystem is %d \n", (int)Oo_info.player_frame_info[i].last_sent[net_sig_idx].subsystems.size()));
+			Oo_info.player_frame_info[i].last_sent[net_sig_idx].subsystems.push_back(-1.0f) ;
+		}
+	}
+	mprintf(("Past the assertion iiii..\n"));
 
 	// store info from the obj struct if it's already in the mission, otherwise, let the physics update call take care of it when the first frame starts.
-	if (in_mission) {
+	if (Game_mode & GM_IN_MISSION) {
+
 		// only add positional info if they are in the mission.
-		Frame_Record.frame_info[net_sig_idx].initial_frame = Frame_Record.number_of_frames;
-		Frame_Record.frame_info[net_sig_idx].positions[Frame_Record.cur_idx] = objp->pos;
-		Frame_Record.frame_info[net_sig_idx].orientations[Frame_Record.cur_idx] = objp->orient;
-		Frame_Record.frame_info[net_sig_idx].rotational_velocities[Frame_Record.cur_idx] = objp->phys_info.rotvel;
-		Frame_Record.frame_info[net_sig_idx].death_or_depart_frame = -1;
+		Oo_info.frame_info[net_sig_idx].initial_frame = Oo_info.number_of_frames;
+		mprintf(("Past the assertion iiiii..\n"));
+
+		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
+		mprintf(("Past the assertion iiiiii..\n"));
+
+		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
+		// TODO: See if there should be any special case for ships destroyed before the beginning of the mission.
 	}
-	else {
-		Frame_Record.frame_info[net_sig_idx].initial_frame = -1;
-		Frame_Record.frame_info[net_sig_idx].death_or_depart_frame = -1;
-	}
+	mprintf(("good!\n"));
 }
 
 // TODO: Find the best place for this.
 void multi_ship_record_mark_as_dead_or_departed(int net_signature)
-{
-	int net_sig_idx = net_signature - 1;
-	Assert(net_sig_idx > -1);
+{	mprintf(("I'm the last one to run! 2\n"));
+	Assert(net_signature > 0);
 
-	if (MULTIPLAYER_MASTER && (Game_mode & GM_MULTIPLAYER)){
-		Frame_Record.frame_info[net_sig_idx].death_or_depart_frame = Frame_Record.number_of_frames;
+	if (MULTIPLAYER_MASTER){
+		Oo_info.frame_info[net_signature].death_or_depart_frame = Oo_info.number_of_frames;
 	}
+
 }
 
 // Update the tracking struct whenever the object is updated in-game
 // Server Only
 void multi_ship_record_update_all() 
 {
+	mprintf(("I'm the last one to run! 3\n"));
 	Assertion(MULTIPLAYER_MASTER, "Non-server accessed a server only function. Please report!!");
 
 	if (!MULTIPLAYER_MASTER) {
@@ -389,144 +412,161 @@ void multi_ship_record_update_all()
 			 continue;
 		 }
 
-		 net_sig_idx = objp->net_signature - 1;
-		// this means we reached the end of the Ships array.
-		 if (net_sig_idx < 0) {
-			 break;
+		 net_sig_idx = objp->net_signature;
+
+		// make sure it's a valid index.
+		 if (net_sig_idx < 1) {
+			 continue;
 		 }
 
 		// Update the position and orientation here in order to record the movement
-		Frame_Record.frame_info[net_sig_idx].positions[Frame_Record.cur_idx] = objp->pos;
-		Frame_Record.frame_info[net_sig_idx].orientations[Frame_Record.cur_idx] = objp->orient;
-		Frame_Record.frame_info[net_sig_idx].rotational_velocities[Frame_Record.cur_idx] = objp->phys_info.rotvel;
+		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
+		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
 	}
 }
 
 // Increment the tracker per frame, before packets are processed
 void multi_ship_record_increment_frame() 
 {
+	mprintf(("I'm the last one to run! 4\n"));
+	Oo_info.number_of_frames++;
+	Oo_info.cur_frame_index++;
 
-	Frame_Record.number_of_frames++;
-	Frame_Record.cur_idx++;
-
-	// Because we are only tracking 240 frames (2 secs on a 120 fps machine), we will have to wrap the index often
-	if (Frame_Record.cur_idx == MAX_FRAMES_RECORDED) {
-		Frame_Record.cur_idx = 0;
-		Frame_Record.wrap_count++;
-		if (Frame_Record.wrap_count == MAX_SERVER_TRACKER_SMALL_WRAPS) {
-			Frame_Record.wrap_count = 0;
-			Frame_Record.larger_wrap_count++;
+	// Because we are only tracking 240 frames (up to 2 secs on a 120 fps machine), we will have to wrap the index often
+	if (Oo_info.cur_frame_index == MAX_FRAMES_RECORDED) {
+		Oo_info.cur_frame_index = 0;
+		Oo_info.wrap_count++;
+		if (Oo_info.wrap_count == MAX_SERVER_TRACKER_SMALL_WRAPS) {
+			Oo_info.wrap_count = 0;
+			Oo_info.larger_wrap_count++;
 		}
 	}
-	Frame_Record.timestamps[Frame_Record.cur_idx] = timestamp();
+	Oo_info.timestamps[Oo_info.cur_frame_index] = timestamp();
 	// reset the number of times we've sent the timestamp to the client.
-	Frame_Record.frame_timestamp_count = 0;
+	Oo_info.frame_timestamp_count = 0;
 }
 
 // returns the last frame's index.
 int multi_find_prev_frame_idx() {
-	if (Frame_Record.cur_idx == 0) {
+	mprintf(("I'm the last one to run! 5\n"));
+	if (Oo_info.cur_frame_index == 0) {
 		return MAX_FRAMES_RECORDED - 1;
 	} else {
-		return Frame_Record.cur_idx - 1;
+		return Oo_info.cur_frame_index - 1;
 	}
 }
 
-ubyte multi_ship_record_calculate_wrap(ushort combined_frame) {
-	// unpack the wrap and frame from the client packet
+// Calculates the current wrap from a packet sequence number or from an otherwise combined frame.
+ubyte multi_ship_record_calculate_wrap(ushort combined_frame) 
+{	mprintf(("I'm the last one to run! 6\n"));
 //	mprintf(("I'm the last one to run!!! 3\n"));
-
-	int frame = combined_frame % MAX_FRAMES_RECORDED;
-	return (combined_frame - frame) / MAX_FRAMES_RECORDED;
+	return combined_frame  / MAX_FRAMES_RECORDED;
 }
 
-// In order to find the right frame to start our weapon simulation, we look for the first
-// frame that will be before our incoming timestamp.
+// Finds the first frame that is before the incoming timestamp.
 int multi_ship_record_find_frame(ushort client_frame, ubyte wrap, int time_elapsed)
 {
-//	mprintf(("I'm the last one to run!!! 4\n"));
+	mprintf(("I'm the last one to run! 7\n"));
 
 	// unpack the wrap and frame from the client packet
 	int frame = client_frame % MAX_FRAMES_RECORDED;
-
 	bool same_wrap = false;
 	// get how many frames we would go into the future.
-	int target_timestamp = Frame_Record.timestamps[frame] + time_elapsed;
+	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
+	mprintf(("target_timestamp came to %d \n", target_timestamp));
 
 	// easy case, client is reasonably up to date, so just return the frame.
-	if (wrap == Frame_Record.wrap_count) {
+	if (wrap == Oo_info.wrap_count) {
+		mprintf(("Branch 1 \n"));
+
 		same_wrap = true;
 
 	}	// somewhat out of date but still salvagable case.
-	else if (wrap == (Frame_Record.wrap_count - 1)) {
+	else if (wrap == (Oo_info.wrap_count - 1)) {
+		mprintf(("Branch 2 \n"));
 		// but we can't use it if it would index to info in the current wrap instead of the previous wrap.
-		if (frame >= Frame_Record.cur_idx) {
+		if (frame >= Oo_info.cur_frame_index) {
+			mprintf(("Branch 3 \n"));
 //			mprintf(("Client requested frame from wrong wrap.\n"));
 			return -1;
 		}
 
 		// Just in case the larger wrap just happened....
-	} else if (wrap == MAX_SERVER_TRACKER_SMALL_WRAPS && Frame_Record.wrap_count == 0){
-		if (frame >= Frame_Record.cur_idx) {
+	} else if (wrap == MAX_SERVER_TRACKER_SMALL_WRAPS && Oo_info.wrap_count == 0){
+		mprintf(("Branch 4 \n"));
+		if (frame >= Oo_info.cur_frame_index) {
+			mprintf(("Branch 5 \n"));
 //			mprintf(("Client requested frame from wrong wrap.\n"));
 			return -1;
 		}
 
 		// request is way too old.
 	} else {
+		mprintf(("Branch 6 \n"));
 //		mprintf(("Client requested frame from wrong wrap.\n"));
 		return -1;
 	}
 
 	// Now that the wrap has been verified, if time_elapsed is zero return the frame it gave us.
 	if(time_elapsed == 0){
+		mprintf(("Branch 7 \n"));
 		return frame;
 	}
 
 	// Otherwise, look for the frame that the client is saying to look for.  If we hit the frame the client sent, abort.
-	for (int i = Frame_Record.cur_idx - 1; i > -1; i--){
+	for (int i = Oo_info.cur_frame_index - 1; i > -1; i--) {
+
 		// Check to see if the client's timestamp matches the recorded frames.
-		if ((Frame_Record.timestamps[i] <= target_timestamp) && (Frame_Record.timestamps[i + 1] > target_timestamp))
+		if ((Oo_info.timestamps[i] <= target_timestamp) && (Oo_info.timestamps[i + 1] > target_timestamp)) {
+			mprintf(("Branch 9 at i = %d \n", i));
 			return i;
-		else if (i == frame)
+		}
+		else if (i == frame) {
+			mprintf(("Branch 10 at i %d \n", i));
 			return -1;
+		}
 	}
 
 	// Check for the wrap.
-	if ((Frame_Record.timestamps[MAX_FRAMES_RECORDED - 1] <= target_timestamp) && (Frame_Record.timestamps[0] > target_timestamp)) {
+	if ((Oo_info.timestamps[MAX_FRAMES_RECORDED - 1] <= target_timestamp) && (Oo_info.timestamps[0] > target_timestamp)) {
+		mprintf(("Branch 11 \n"));
 		return MAX_FRAMES_RECORDED - 1;
 	}
 
 	// Check the oldest frames.
-	for (int i = MAX_FRAMES_RECORDED - 2; i > Frame_Record.cur_idx; i--) {
-		if ((Frame_Record.timestamps[i] <= target_timestamp) && (Frame_Record.timestamps[i + 1] > target_timestamp))
+	for (int i = MAX_FRAMES_RECORDED - 2; i > Oo_info.cur_frame_index; i--) {
+		if ((Oo_info.timestamps[i] <= target_timestamp) && (Oo_info.timestamps[i + 1] > target_timestamp)) {
+			mprintf(("Branch 12 at i = %d \n", i));
 			return i;
-		else if (i == frame)
+		}
+		else if (i == frame) {
+			mprintf(("Branch 13 \n"));
 			return -1;
+		}
 	}
 
 	// this is if again the request is way too delayed to be valid, but somehow wasn't caught earlier.
 //	mprintf(("g) Timestamp given to frame tracker is invalid. And in a section that should be logically dead\n"));
+	mprintf(("Branch 14 \n"));
 	return -1;
 }
 
 // verify that a given frame exists for a given ship, requires the sequence number that the client sends.
 bool multi_ship_record_verify_frame(object* objp, int combined_frame) 
 {
-
-//	mprintf(("Just in case frame verficiation... verification!  \n"));
+	mprintf(("I'm the last one to run! 8\n"));
 
 	// calculate the exact frame that combined_frame should be, if the largest wrap has occured. 
-	if (Frame_Record.number_of_frames >= SERVER_TRACKER_LARGE_WRAP_TOTAL) {
-		int temp = Frame_Record.number_of_frames % SERVER_TRACKER_LARGE_WRAP_TOTAL;
-		ushort larger_wraps = (ushort)((Frame_Record.number_of_frames - temp)  / SERVER_TRACKER_LARGE_WRAP_TOTAL);
+	if (Oo_info.number_of_frames >= SERVER_TRACKER_LARGE_WRAP_TOTAL) {
+		int temp = Oo_info.number_of_frames % SERVER_TRACKER_LARGE_WRAP_TOTAL;
+		ushort larger_wraps = (ushort)((Oo_info.number_of_frames - temp)  / SERVER_TRACKER_LARGE_WRAP_TOTAL);
 		combined_frame += (larger_wraps * SERVER_TRACKER_LARGE_WRAP_TOTAL);
 //		mprintf(("Part1 was true (somehow), Vars are temp %d, larger_wraps %d, combined_frame %d  \n", temp, larger_wraps, combined_frame));
 	}
 
 	// do a quick check to see if the frame sent by the client was pre-wrap and decrement, if so.
-	if (combined_frame > Frame_Record.number_of_frames) {
-//		mprintf(("Part2 was true, combined_frame %d, number_of_frames %d \n", combined_frame, Frame_Record.number_of_frames));
+	if (combined_frame > Oo_info.number_of_frames) {
+//		mprintf(("Part2 was true, combined_frame %d, number_of_frames %d \n", combined_frame, Oo_info.number_of_frames));
 		// if it looks like pre-wrap and then subtracts to less than zero, it's invalid data.
 		if (combined_frame - SERVER_TRACKER_LARGE_WRAP_TOTAL < 0) {
 //			mprintf(("Invalid data!\n"));
@@ -538,74 +578,83 @@ bool multi_ship_record_verify_frame(object* objp, int combined_frame)
 	}
 
 	// combined_frame should now house the correct frame, no we compare to verify. TODO: finish the death_or_depart variable assignments 
-	if (/*combined_frame < object_updates.svr_frames.death_or_depart_frame[objp->net_signature] && */ combined_frame >= Frame_Record.frame_info[objp->net_signature].initial_frame) {
-//		mprintf(("Final frame verification SUCCEEEEEEEEEDED!!!!.\n"));
+	if (/*combined_frame < object_updates.svr_frames.death_or_depart_frame[objp->net_signature] && */ combined_frame >= Oo_info.frame_info[objp->net_signature].initial_frame) {
+		//		mprintf(("Final frame verification SUCCEEEEEEEEEDED!!!!.\n"));
 
 		return true;
 	}
-//	mprintf(("Final frame verification failed.\n"));
+	//	mprintf(("Final frame verification failed.\n"));
 	return false;
 }
 
 // Quick lookup for the record of position.
 vec3d multi_ship_record_lookup_position(object* objp, int frame) {
-//	mprintf(("I'm the last one to run!!! 5\n"));
-	int net_sig_idx = objp->net_signature - 1;
-	return Frame_Record.frame_info[frame].positions[net_sig_idx];
+	mprintf(("I'm the last one to run! 9\n"));
+	return Oo_info.frame_info[objp->net_signature].positions[frame];
 }
 
 // Quick lookup for the record of orientation.
 matrix multi_ship_record_lookup_orientation(object* objp, int frame) {
-//	mprintf(("I'm the last one to run!!! 6\n"));
-	int net_sig_idx = objp->net_signature - 1;
-	return Frame_Record.frame_info[frame].orientations[net_sig_idx];
+	mprintf(("I'm the last one to run! 10\n"));
+	return Oo_info.frame_info[objp->net_signature].orientations[frame];
 }
 
 // quickly lookup how much time has passed since the given frame.
 uint multi_ship_record_get_time_elapsed(ushort original_frame) {
-//	mprintf(("I'm the last one to run!!! 7\n"));
+	mprintf(("I'm the last one to run! 11\n"));
 
-	return Frame_Record.timestamps[Frame_Record.cur_idx] - Frame_Record.timestamps[original_frame];
+
+	// Bogus values
+	Assertion(original_frame >= MAX_FRAMES_RECORDED, "Function multi_ship_record_get_time_elapsed() got passed an invalid value, this is a code error, please report. ");
+	if (original_frame >= MAX_FRAMES_RECORDED) {
+		return 0;
+	}
+
+	return Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[original_frame];
 }
 
-// 
-int multi_ship_record_adjust_timestamp(int starting_frame, int ending_frame, int time_elapsed) {
-//	mprintf(("I'm the last one to run!!! 8\n"));
+// figures out how much time has passed 
+int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame, int time_elapsed) {
+	mprintf(("I'm the last one to run! 12\n"));
 
 	starting_frame = starting_frame % MAX_FRAMES_RECORDED;
 
-	int return_value = time_elapsed - (Frame_Record.timestamps[ending_frame] - Frame_Record.timestamps[starting_frame]);
-//	mprintf(("Adjust timestamp's value is: %d",return_value));
+	int return_value = time_elapsed - (Oo_info.timestamps[ending_frame] - Oo_info.timestamps[starting_frame]);
+	//	mprintf(("Adjust timestamp's value is: %d",return_value));
 	return return_value;
 }
 
 // find the exact point on the server that the client sees by interpolating (linearly)
-void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_ori, int net_signature, ushort original_frame, int time_elapsed) {
-//	mprintf(("I'm the last one to run!!! 9\n"));
+void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_ori, int net_sig_idx, ushort original_frame, int time_elapsed) {
+	mprintf(("I'm the last one to run! 13\n"));
 
-	int timestamp_difference;
+	float timestamp_difference;
 	float scale_factor;
 	int next_frame;
 
 	// figure out what the other frame index would be.
 	if (original_frame == MAX_FRAMES_RECORDED - 1) {
 		next_frame = 0;
-	}	else {
+	}
+	else {
 		next_frame = original_frame + 1;
 	}
 
 	// find how much time was there between frames
-	timestamp_difference = Frame_Record.timestamps[next_frame] - Frame_Record.timestamps[original_frame];
-	Assertion(timestamp_difference >= 0, "While interpolating, timestamp difference was invalid value: %d", timestamp_difference);
+	timestamp_difference = float(Oo_info.timestamps[next_frame] - Oo_info.timestamps[original_frame]);
+	Assertion(timestamp_difference >= 0.0f, "While interpolating, timestamp difference was invalid value: %f", timestamp_difference);
 
+	if (timestamp_difference < 0.0f) {
+		return;
+	}
 	// figure out how far between the points we would be
-	scale_factor = (float)(time_elapsed / timestamp_difference);
+	scale_factor = (float)time_elapsed / timestamp_difference;
 
 	vec3d pos_a, pos_b, temp_vec;
 
 	// retreive the points
-	pos_a = Frame_Record.frame_info[original_frame].positions[net_signature];
-	pos_b = Frame_Record.frame_info[next_frame].positions[net_signature];
+	pos_a = Oo_info.frame_info[net_sig_idx].positions[original_frame];
+	pos_b = Oo_info.frame_info[net_sig_idx].positions[next_frame];
 
 	// and calculate
 	vm_vec_sub(&temp_vec, &pos_b, &pos_a);
@@ -615,99 +664,163 @@ void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_o
 	angles angles_a, angles_b, angles_final;
 
 	// get the angles
-	vm_extract_angles_matrix_alternate(&angles_a, &Frame_Record.frame_info[original_frame].orientations[net_signature]);
-	vm_extract_angles_matrix_alternate(&angles_b, &Frame_Record.frame_info[next_frame].orientations[net_signature]);
+	vm_extract_angles_matrix_alternate(&angles_a, &Oo_info.frame_info[net_sig_idx].orientations[original_frame]);
+	vm_extract_angles_matrix_alternate(&angles_b, &Oo_info.frame_info[net_sig_idx].orientations[next_frame]);
 
 	// and calculate
 	vm_interpolate_angles_quick(&angles_final, &angles_a, &angles_b, scale_factor);
 
 	vm_angles_2_matrix(interp_ori, &angles_final);
+	vm_orthogonalize_matrix(interp_ori);
 }
 
-void multi_oo_set_rollback_wep_create_mode(bool enable = false) {
-	Frame_Record.rollback_create_mode = enable;
+void multi_ship_record_set_rollback_wep_mode(bool enable) {
+	mprintf(("I'm the last one to run! 14\n"));
+	Oo_info.rollback_mode = enable;
+}
 
-	if (enable) {
-		//init things here, if needed.
+bool multi_ship_record_get_rollback_wep_mode() {
+	mprintf(("I'm the last one to run! 15\n"));
+	return Oo_info.rollback_mode;
+}
+
+void multi_ship_record_add_rollback_wep(int wep_objnum) {
+	mprintf(("I'm the last one to run! 16\n"));
+	object* wobjp = &Objects[wep_objnum];
+
+	// check for valid pointer
+	if (wobjp == nullptr){
+		return;
+	}
+	
+	// add it to the list of weapons we'll need to add to the simulation.
+	Oo_info.rollback_wobjp.push_back(wobjp);
+}
+
+// for now we create and push forward.  Later we will create, store, roll the whole frame forward and check for collisions.
+void multi_ship_record_create_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame) {
+	mprintf(("I'm the last one to run! 17\n"));
+	int net_sig_idx;
+	int counter = 0;
+	object* objp;
+	// roll the ships back in case of autoaim
+	for (ship & cur_ship : Ships) {
+		objp = &Objects[cur_ship.objnum];
+		if (objp == nullptr) {
+			mprintf(("Failing on start because of nullptr\n"));
+			continue;
+		}
+
+		net_sig_idx = objp->net_signature;
+
+		// this should not happen, but it only means a less accurate simulation, not a crash.
+		if (net_sig_idx < 1) {
+			mprintf(("Not valid network ship: %s\n", Ships[objp->instance].display_name.data()));
+			counter++;
+			continue; 
+		}
+		counter++;
+
+		objp->pos = Oo_info.frame_info[net_sig_idx].positions[frame];
+		objp->orient = Oo_info.frame_info[net_sig_idx].orientations[frame];
 	}
 
+	mprintf(("Tracing Crashes 1\n"));
+
+	mprintf(("Firing ship velocity: %f %f %f\n", pobjp->phys_info.vel.xyz.x, pobjp->phys_info.vel.xyz.y, pobjp->phys_info.vel.xyz.z));
+	mprintf(("Old position: %f %f %f\n", pobjp->pos.xyz.x, pobjp->pos.xyz.y, pobjp->pos.xyz.z));
+
+	vec3d hold_pos = pobjp->pos;
+	matrix hold_orient = pobjp->orient;
+	// use the positions given by the packet instead of the ones on record for the ship in question.
+	pobjp->pos = *pos;
+	pobjp->orient = *orient; 
+	mprintf(("New position: %f %f %f\n", pobjp->pos.xyz.x, pobjp->pos.xyz.y, pobjp->pos.xyz.z));
+
+
+	mprintf(("Tracing Crashes 2\n"));
+
+	multi_ship_record_set_rollback_wep_mode(true); // allows weapon craetion to know that the weapon object pointers need to be stored.
+	mprintf(("Tracing Crashes 3\n"));
+
+	ship_fire_primary(pobjp, 0, 1);
+	mprintf(("Tracing Crashes 4\n"));
+
+	multi_ship_record_set_rollback_wep_mode(false);
+	mprintf(("Tracing Crashes 5\n"));
+
+	// If we do in between frame collision detection, we need to have to
+	for (ship & cur_ship : Ships) {
+		objp = &Objects[cur_ship.objnum];
+		if (objp == nullptr) {
+			mprintf(("Failing on return because nullptr\n"));
+			continue;
+		}
+
+		net_sig_idx = objp->net_signature;
+
+		// this should not happen, but it only means a less accurate simulation, not a crash.
+		if (net_sig_idx < 0) {
+			mprintf(("Failing on return because net signature is 0\n"));
+			continue; 
+		}
+		counter--;
+		objp->pos = Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index];
+		objp->orient = Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index];
+	}
+	mprintf(("Tracing Crashes 6, counter is: %d\n", counter));
+
+	float time_elapsed = (float)multi_ship_record_get_time_elapsed((ushort)frame) / (float)TIMESTAMP_FREQUENCY;
+	mprintf(("time_elapsed was calculated as: %f\n", time_elapsed));
+	object* wobjp;
+
+	// Mimic the physics function calls to place the created weapons where they are supposed to at the current frame time.
+	for (int i = 0; i < Oo_info.rollback_wobjp.size(); i++) {
+		wobjp = Oo_info.rollback_wobjp[i];
+
+		if (wobjp == nullptr) {
+			continue;
+		}
+
+		vm_vec_normalize(&wobjp->phys_info.vel);
+		vm_vec_scale(&wobjp->phys_info.vel, wobjp->phys_info.max_vel.xyz.z);
+
+		mprintf(("Weapon velocity: %f %f %f\n", wobjp->phys_info.vel.xyz.x, wobjp->phys_info.vel.xyz.y, wobjp->phys_info.vel.xyz.z));
+
+		vm_vec_scale_add2(&wobjp->pos, &wobjp->phys_info.vel, time_elapsed);
+		mprintf(("Final position of rollback weapon is %f %f %f\n", wobjp->pos.xyz.x, wobjp->pos.xyz.y, wobjp->pos.xyz.z));
+		Weapons[wobjp->instance].lifeleft -= time_elapsed;
+
+	}
+	Oo_info.rollback_wobjp.clear();
+
 }
 
-bool multi_ship_record_lookup_rollback_wep_create_mode(){
-	return Frame_Record.rollback_create_mode;
-}
+// This will eventually house all the rollforward calculations, including collision detection.
+void multi_ship_record_process_all_rollback_weapons() {
+	mprintf(("I'm the last one to run! 18\n"));
+	if (Oo_info.rollback_wobjp.size() == 0) {
+		return;
+	}
 
-// TODO: FIX AND FIND PLACE TO CALL
-// Clear all records from tracking struct, should only be called on game exit.
-void multi_ship_record_clear_all(){ 
-//	mprintf(("I'm the last one to run!!! 10\n"));
-	
-	//Frame_Record.frame_info.clear;
-	delete[] &Frame_Record;
-	delete[] &Oo_info;
+	for (auto wobjp = Oo_info.rollback_wobjp.begin(); wobjp != Oo_info.rollback_wobjp.end(); wobjp++) {
+		
+
+	}
+
+
+	return;
 }
 
 // ---------------------------------------------------------------------------------------------------
 // Client side frame tracking, for now used only for referenced in fire packets to improve client accuracy.
 // 
 
-// Client Only - Add a new object on *ship creation* to the tracking struct
-void multi_ship_record_add_ship_client(int obj_num)
-{
-//	mprintf(("Ship added to client record struct.\n"));
-	Assertion(!MULTIPLAYER_MASTER, "Server accessed a client only function. Please report!!");
-
-	if (MULTIPLAYER_MASTER) {
-		return;
-	}
-
-	object* objp = &Objects[obj_num];
-
-	// check for a ship that will enter the mission later on and has not yet had its net_signature set.
-	if (objp->net_signature == 0) {
-		return;
-	}
-
-	// our target size is the number of ships in the vector plus one because net_signatures start at 1 and size gives the number of elements (1 indexed also), and this should be a new element.
-	int target_size = (int)Oo_info.interp.size() + 1;
-
-//	mprintf(("The client object adder says that the target size is %d and the incoming net_signature is %d\n", target_size, objp->net_signature));	
-
-	// if we're right where we should be.
-	if (objp->net_signature == target_size) {
-//		mprintf(("Server client tracker believes object signature is right on target.\n"));
-		Oo_info.interp.push_back(*new(interp_message_tracking));		
-
-	}	// if the storage already exists.
-	else if (objp->net_signature < (target_size)) {
-//		mprintf(("Server client tracker belives that the object already had storage available. No storage added.\n"));
-
-	}	// if not, create the storage.
-	else if (objp->net_signature > (target_size)) {
-//		mprintf(("Server client tracker belives that the object is way past the storage available..\n"));
-		for (int i = objp->net_signature - (target_size); i > 0; i--) {
-			Oo_info.interp.push_back(*new(interp_message_tracking));
-		}
-	} // and if I missed something.
-	else {
-//		mprintf(("Some sort of logic was misssed in the client object adder function.\n"));
-	}
-	// Have this ready for later when we're sure that it works correctly at least most of the time.
-	//	Assertion(objp->net_signature == target_size, "New entry into the ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and target_size %d\n", objp->net_signature, target_size);
-
-	// net_signature is 1 indexed, so we have to adjust to correctly access info the vector.
-	int net_sig_idx = objp->net_signature - 1;
-
-	// Initialize timing
-	Oo_info.interp[net_sig_idx].cur_pack_pos_frame = 0;
-	Oo_info.interp[net_sig_idx].prev_pack_pos_frame = 0;
-}
-
 // See if a newly arrived object update packet should be the new reference for the improved primary fire packet 
 void multi_ship_record_rank_seq_num(object* objp, ushort seq_num) 
-{
+{	mprintf(("I'm the last one to run! 19\n"));
 
-	int net_sig_idx = objp->net_signature - 1;
+	int net_sig_idx = objp->net_signature;
 
 	// see if it's more recent.  Most recent is best.
 	if (seq_num > Oo_info.most_recent_frame) {
@@ -740,7 +853,7 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 
 // Client side! Quick lookup for the most recently received ship
 ushort multi_client_lookup_ref_obj_net_sig()
-{
+{	mprintf(("I'm the last one to run! 20\n"));
 //	mprintf(("I'm the last one to run!!! 12\n"));
 
 	return Oo_info.most_recent_updated_net_signature;
@@ -748,7 +861,7 @@ ushort multi_client_lookup_ref_obj_net_sig()
 
 // Client side! Quick lookup for the most recently received frame
 ushort multi_client_lookup_frame_idx()
-{
+{	mprintf(("I'm the last one to run! 21\n"));
 //	mprintf(("I'm the last one to run!!! 13\n"));
 
 	return Oo_info.most_recent_frame;
@@ -756,7 +869,7 @@ ushort multi_client_lookup_frame_idx()
 
 // Client side! Quick lookup for the most recently received timestamp.
 int multi_client_lookup_frame_timestamp()
-{
+{	mprintf(("I'm the last one to run! 22\n"));
 //	mprintf(("I'm the last one to run!!! 14\n"));
 
 	return Oo_info.ref_timestamp;
@@ -764,26 +877,26 @@ int multi_client_lookup_frame_timestamp()
 
 
 int multi_client_lookup_current_frametime() 
-{
+{	mprintf(("I'm the last one to run! 23\n"));
 	return Oo_info.ref_pos_frametime;
 }
 
 void multi_reset_oo_info(ushort net_sig)
-{
-	int net_sig_idx = net_sig - 1;		
+{	mprintf(("I'm the last one to run! 24\n"));
+	Assertion(net_sig != 0, "Multi_reset_oo_info got passed an invalid value. This is a coder error, please report.");
+	if (net_sig == 0) {
+		return;
+	}
 
-	for (auto player_record = Frame_Record.player_frame_info.begin(); player_record != Frame_Record.player_frame_info.end(); player_record++) {
-		player_record->last_sent[net_sig_idx].timestamp = -1;
-		player_record->last_sent[net_sig_idx].position = vmd_zero_vector;
-		player_record->last_sent[net_sig_idx].rot_vel = vmd_zero_vector;
-		player_record->last_sent[net_sig_idx].hull = -1.0f;
-		player_record->last_sent[net_sig_idx].ai_mode = -1;
-		player_record->last_sent[net_sig_idx].ai_submode = -1;
-		player_record->last_sent[net_sig_idx].target_signature = -1;
-		player_record->last_sent[net_sig_idx].perfect_shields_sent = false;
-		for (auto subsystem = player_record->last_sent[net_sig_idx].subsystems.begin(); subsystem != player_record->last_sent[net_sig_idx].subsystems.end(); subsystem++) {
-			*subsystem = -1.0f;
-		}
+	for (auto player_record = Oo_info.player_frame_info.begin(); player_record != Oo_info.player_frame_info.end(); player_record++) {
+		player_record->last_sent[net_sig].timestamp = -1;
+		player_record->last_sent[net_sig].position = vmd_zero_vector;
+		player_record->last_sent[net_sig].hull = -1.0f;
+		player_record->last_sent[net_sig].ai_mode = -1;
+		player_record->last_sent[net_sig].ai_submode = -1;
+		player_record->last_sent[net_sig].target_signature = -1;
+		player_record->last_sent[net_sig].perfect_shields_sent = false;
+		player_record->last_sent[net_sig].subsystems.clear();
 	}
 }
 
@@ -996,7 +1109,7 @@ int multi_oo_pack_client_data(ubyte *data)
 #define PACK_POSITIVE_NEGATIVE_PERCENT(v) { std::uint8_t upercent; if(v < -1.0f){v = -1.0f;} v++; upercent = (v * 127.0f) <= 254.0f ? (std::uint8_t)(v * 127.0f) : (std::uint8_t)254; memcpy(data + packet_size + header_bytes, &upercent, sizeof(std::uint8_t)); packet_size++; }
 
 int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *data_out)
-{	
+{		mprintf(("I'm the last one to run! 25\n"));
 	ubyte data[255];
 	ubyte data_size = 0, ret = 0;	
 	ship *shipp;	
@@ -1038,18 +1151,18 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	}	
 
 	// Send the timestamp to the client to help the client sync more cleanly to the server up to 5 times per frame.
-	if (Frame_Record.frame_timestamp_count < 5) {
+	if (Oo_info.frame_timestamp_count < 3) {
 
 		oo_flags |= OO_TIMESTAMP;
-		ushort temp_timestamp = Frame_Record.timestamps[Frame_Record.cur_idx] - Frame_Record.timestamps[multi_find_prev_frame_idx()];
+		ushort temp_timestamp = Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()];
 
 		// only the very longest frames are going to have greater than 255 ms, so cap it at that.
 		if (temp_timestamp > 255) {
 			temp_timestamp = 255;
 		}
-		ubyte timestamp_out = temp_timestamp;
+		ubyte timestamp_out = (ubyte)temp_timestamp;
 		PACK_BYTE(timestamp_out);
-		Frame_Record.frame_timestamp_count++;
+		Oo_info.frame_timestamp_count++;
 //		mprintf(("Packet foo: Timestamp is %d\n", temp_timestamp));
 
 		// putting this in the position bucket because it's mainly to help with position interpolation
@@ -1192,7 +1305,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		for (subsystem = GET_FIRST(&shipp->subsys_list); subsystem != END_OF_LIST(&shipp->subsys_list);
 			subsystem = GET_NEXT(subsystem)) {
 				// Don't send destroyed subsystems, (another packet handles that), but check to see if the subsystem changed since the last update. 
-			if ((subsystem->current_hits != 0.0f) && (subsystem->current_hits != Frame_Record.player_frame_info[pl->player_id].last_sent[objp->net_signature - 1].subsystems[i])) {
+			if ((subsystem->current_hits != 0.0f) && (subsystem->current_hits != Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[i])) {
 				// store the values for use later.
 				flagged_subsystem_list[count] = i;
 				// this should be safe because we only work with subsystems that have health.
@@ -1204,7 +1317,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		}
 		
 		// Only send info if the count is greater than zero and if we're *not* on the very first frame when everything is going to be 100%, anyway.
-		if (count > 0 && Frame_Record.number_of_frames != 0){
+		if (count > 0 && Oo_info.number_of_frames != 0){
 			Assertion(count <= MAX_MODEL_SUBSYSTEMS, "Object Update packet exceeded limit for number of subsystems. This is a fatal error in the code, please report!");
 			oo_flags |= OO_SUBSYSTEMS_NEW;
 
@@ -1281,7 +1394,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		ADD_USHORT( objp->net_signature );		
 	}	
 
-	if (Frame_Record.larger_wrap_count % 2 > 0) {
+	if (Oo_info.larger_wrap_count % 2 > 0) {
 		oo_flags |= OO_ODD_WRAP;
 	}
 
@@ -1293,7 +1406,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	ADD_DATA( data_size );	
 //	mprintf(("packet foo: data size is: %d\n", data_size));
 	// send the exact frame that we're on.
-	ushort seq = Frame_Record.cur_idx + (MAX_FRAMES_RECORDED * Frame_Record.wrap_count);
+	ushort seq = Oo_info.cur_frame_index + (MAX_FRAMES_RECORDED * Oo_info.wrap_count);
 	
 	multi_rate_add(NET_PLAYER_NUM(pl), "seq", 2);
 	ADD_USHORT( seq );
@@ -1437,7 +1550,7 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data)
 // Cyborg17 -- Unpacks percents that go from -100% to positive 100% with low resolution. Output is from -100% to 100%.
 #define UNPACK_POSITIVE_NEGATIVE_PERCENT(v) { ubyte temp_byte; memcpy(&temp_byte, data + offset, sizeof(ubyte)); v = (float)temp_byte / 127.0f; v--; offset++;}
 int multi_oo_unpack_data(net_player* pl, ubyte* data)
-{
+{	mprintf(("I'm the last one to run! 26\n"));
 	int offset = 0;
 	object* pobjp;
 	ushort net_sig = 0;
@@ -1497,18 +1610,22 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	sip = &Ship_info[shipp->ship_info_index];
 
 	// used to access stuff in vectors by index
-	int net_sig_idx = net_sig - 1;
 	bool pre_wrap_packet = false;
 
+	// TODO: switch this to an assertion before merging
+	Verification(net_sig <= Oo_info.interp.size(), "Somehow there weren't enough copies of the interpolation tracking info created.");
+
+	oo_packet_and_interp_tracking* interp_data = &Oo_info.interp[net_sig];
+
 	// two variables to make the following code more readable.
-	int most_recent = Oo_info.interp[net_sig_idx].most_recent_packet;
-	bool prev_odd_wrap = Oo_info.interp[net_sig_idx].odd_wrap;
+	int most_recent = interp_data->most_recent_packet;
+	bool prev_odd_wrap = interp_data->odd_wrap;
 
 	// same wrap case ... if they are both true or both false.
 	if ( (oo_flags & OO_ODD_WRAP && prev_odd_wrap == true ) || (!(oo_flags & OO_ODD_WRAP) && (prev_odd_wrap == false) )) {
 		// just check that it's in order before saying it's the most recent.
 		if (seq_num > most_recent) {
-			Oo_info.interp[net_sig_idx].most_recent_packet = seq_num;
+			interp_data->most_recent_packet = seq_num;
 		}
 		// we do not need to mark anything for out of order packets within the same wrap. Individual checks
 		// will handle the rest.
@@ -1520,17 +1637,17 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			// with a new wrap, we have to adjust the individual tracker 
 			// records so that FSO can tell that the incoming frames are newer than what it already saw.
 			if ( most_recent - seq_num > HAS_WRAPPED_MINIMUM ) {
-				Oo_info.interp[net_sig_idx].most_recent_packet = seq_num;
-				Oo_info.interp[net_sig_idx].odd_wrap = !Oo_info.interp[net_sig_idx].odd_wrap;
+				interp_data->most_recent_packet = seq_num;
+				interp_data->odd_wrap = !interp_data->odd_wrap;
 
-				Oo_info.interp[net_sig_idx].rot_vel_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
-				Oo_info.interp[net_sig_idx].hull_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
-				Oo_info.interp[net_sig_idx].shields_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->hull_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->shields_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 
-				for (auto subsys_frame = Oo_info.interp[net_sig_idx].subsystems_frame.begin(); subsys_frame != Oo_info.interp[net_sig_idx].subsystems_frame.end(); subsys_frame++) { 
+				for (auto subsys_frame = interp_data->subsystems_frame.begin(); subsys_frame != interp_data->subsystems_frame.end(); subsys_frame++) {
+
 					subsys_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 				}
-				Oo_info.interp[net_sig_idx].ai_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->ai_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 
 			}
 		} // if this a pre-wrap out-of-order packet, we have to mark it as so, so that we adjust seq_num for the individual checks
@@ -1552,7 +1669,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			GET_DATA(timestamp);
 
 		// figure out how many items we may have to create
-		int temp_diff = seq_num - Oo_info.received_frametimes.size() + 1;
+		int temp_diff = (int)seq_num - (int)Oo_info.received_frametimes.size() + 1;
 		// if it already has enough slots, just fill in the value.
 		if (temp_diff <= 0) {
 			Oo_info.received_frametimes[seq_num] = timestamp;
@@ -1649,31 +1766,31 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
 
 		// make sure this is the newest frame sent and then start storing everything.
-		if (frame_comparison > Oo_info.interp[net_sig_idx].cur_pack_pos_frame) {
+		if (frame_comparison > interp_data->cur_pack_pos_frame) {
 			// mark this packet as a brand new update.
 			pos_new = true;
 			adjust_interp_pos = true;
 
 			// make sure to turn off no position change mode.
-			Oo_info.interp[net_sig_idx].prev_packet_no_pos = false;
+			interp_data->prev_packet_positionless = false;
 
 			// update timing info, position
-			Oo_info.interp[net_sig_idx].prev_pack_pos_frame = Oo_info.interp[net_sig_idx].cur_pack_pos_frame;
-			Oo_info.interp[net_sig_idx].cur_pack_pos_frame = seq_num;
-			Oo_info.interp[net_sig_idx].pos_timestamp = timestamp();
+			interp_data->prev_pack_pos_frame = interp_data->cur_pack_pos_frame;
+			interp_data->cur_pack_pos_frame = seq_num;
+			interp_data->pos_timestamp = timestamp();
 
 		} // if we actually received a slightly old frame...
-		else if (frame_comparison > Oo_info.interp[net_sig_idx].prev_pack_pos_frame){
+		else if (frame_comparison > interp_data->prev_pack_pos_frame){
 			//update timing info.
-			Oo_info.interp[net_sig_idx].prev_pack_pos_frame = seq_num;
+			interp_data->prev_pack_pos_frame = seq_num;
 			adjust_interp_pos = true;
 		}
 
 		if (pos_new) {
 			pobjp->phys_info = new_phys_info;			
-			Oo_info.interp[net_sig_idx].cur_pack_des_vel = pobjp->phys_info.desired_vel;
-			Oo_info.interp[net_sig_idx].cur_pack_local_des_vel = local_desired_vel;
-			Oo_info.interp[net_sig_idx].cur_pack_des_rot_vel = pobjp->phys_info.desired_rotvel;
+			interp_data->cur_pack_des_vel = pobjp->phys_info.desired_vel;
+			interp_data->cur_pack_local_des_vel = local_desired_vel;
+			interp_data->cur_pack_des_rot_vel = pobjp->phys_info.desired_rotvel;
 		}
 
 		float temp_distance = vm_vec_dist(&new_pos, &pobjp->pos);
@@ -1683,10 +1800,10 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		if(pos_new && (temp_distance > OO_POS_UPDATE_TOLERANCE || temp_distance < 0.5f || new_phys_info.vel == vmd_zero_vector)){
 			pobjp->pos = new_pos;
 			//Also, make sure that FSO knows that it does not need to smooth anything out
-			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
+			interp_data->position_error = vmd_zero_vector;
 			// When not bashing, find how much error to smooth out during interpolation.
 		} else {
-			vm_vec_sub(&Oo_info.interp[net_sig_idx].position_error, &new_pos, &pobjp->pos);
+			vm_vec_sub(&interp_data->position_error, &new_pos, &pobjp->pos);
 		}
 
 		// for orientation, we should bash for brand new orientations and then let interpolation do its work.  
@@ -1695,26 +1812,26 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		// and also interpolated using the same time deltas.
 		if (pos_new){
 			pobjp->orient = new_orient;
-			Oo_info.interp[net_sig_idx].new_orientation = new_orient;
+			interp_data->new_orientation = new_orient;
 		}
 
 		multi_oo_maybe_update_interp_info(pobjp, &new_pos, &new_angles, &new_orient, &new_phys_info, adjust_interp_pos, pos_new);
 
-	} // in order to allow the server to send only new pos and ori info, we have to do a few comparisons here
-	else if (seq_num == Oo_info.interp[net_sig_idx].most_recent_packet){
-		if (Oo_info.interp[net_sig_idx].prev_packet_no_pos == false) {
-			Oo_info.interp[net_sig_idx].prev_packet_no_pos = true;
-			Oo_info.interp[net_sig_idx].prev_pack_pos_frame = Oo_info.interp[net_sig_idx].cur_pack_pos_frame ;
-			Oo_info.interp[net_sig_idx].cur_pack_pos_frame = seq_num;
+	} // in order to allow the server to send only new pos and ori info, we have to do a couple checks here
+	else if (seq_num == interp_data->most_recent_packet){
+		if (interp_data->prev_packet_positionless == false) {
+			interp_data->prev_packet_positionless = true;
+			interp_data->prev_pack_pos_frame = interp_data->cur_pack_pos_frame ;
+			interp_data->cur_pack_pos_frame = seq_num;
 			
-			// bash the ship's velocity to zero
+			// bash the ship's velocity and rotational velocity to zero
 			pobjp->phys_info.vel = vmd_zero_vector;
 			pobjp->phys_info.desired_vel = vmd_zero_vector;
 			pobjp->phys_info.rotvel = vmd_zero_vector;
 			pobjp->phys_info.desired_rotvel = vmd_zero_vector;
 
 			// if we haven't moved, there is *no* position error, although it should not matter.
-			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
+			interp_data->position_error = vmd_zero_vector;
 		}
 	}
 
@@ -1725,9 +1842,9 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// hull info
 	if ( oo_flags & OO_HULL_NEW ){
 		UNPACK_PERCENT(fpct);
-		if (Oo_info.interp[net_sig_idx].hull_frame < seq_num) {
+		if (interp_data->hull_frame < frame_comparison) {
 			pobjp->hull_strength = fpct * Ships[pobjp->instance].ship_max_hull_strength;
-			Oo_info.interp[net_sig_idx].hull_frame = seq_num;
+			interp_data->hull_frame = seq_num;
 		}
 	}	
 
@@ -1735,12 +1852,13 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	if (oo_flags & OO_SHIELDS_NEW) {
 		float quad = shield_get_max_quad(pobjp);
 
-		if (Oo_info.interp[net_sig_idx].shields_frame < seq_num) {
+		// check before unpacking here so we don't have to recheck for each quadrant.
+		if (interp_data->shields_frame < frame_comparison) {
 			for (int i = 0; i < pobjp->n_quadrants; i++) {
 				UNPACK_PERCENT(fpct);
 				pobjp->shield_quadrant[i] = fpct * quad;
 			}
-			Oo_info.interp[net_sig_idx].shields_frame = seq_num;
+			interp_data->shields_frame = seq_num;
 		}
 		else {
 			for (int i = 0; i < pobjp->n_quadrants; i++) {
@@ -1775,7 +1893,8 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			// we found a match, so grab the next byte, so we can calculate the new hitpoints
 			UNPACK_PERCENT(current_percent);
 
-			if (seq_num > Oo_info.interp[net_sig_idx].subsystems_frame[idx]) {
+			// update frame is *per* subsystem here
+			if (frame_comparison > interp_data->subsystems_frame[idx]) {
 				subsysp->current_hits = current_percent * subsysp->max_hits;
 				subsys_count++;
 
@@ -1809,32 +1928,37 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		ushort target_signature;
 		object *target_objp;
 
+		// AI info
 		GET_DATA( umode );
 		GET_SHORT( submode );
 		GET_USHORT( target_signature );		
 
-		if(shipp->ai_index >= 0){
-			// make sure to undo the wrap if it occurred during compression for unset ai mode.
-			if (umode == 255) {
-				Ai_info[shipp->ai_index].mode = -1; 
-			}
-			else {
-				Ai_info[shipp->ai_index].mode = umode;
-			}
-			Ai_info[shipp->ai_index].submode = submode;		
-
-			// set this guys target objnum
-			target_objp = multi_get_network_object( target_signature );
-			if ( target_objp == nullptr ){
-				Ai_info[shipp->ai_index].target_objnum = -1;
-			} else {
-				Ai_info[shipp->ai_index].target_objnum = OBJ_INDEX(target_objp);
-			}
-		}		
 		// primary weapon energy		
 		float weapon_energy_pct;
 		UNPACK_PERCENT(weapon_energy_pct);
-		shipp->weapon_energy = sip->max_weapon_reserve * weapon_energy_pct;		
+
+		if( frame_comparison > interp_data->ai_frame ){
+			if ( shipp->ai_index >= 0 ){
+				// make sure to undo the wrap if it occurred during compression for unset ai mode.
+				if (umode == 255) {
+					Ai_info[shipp->ai_index].mode = -1; 
+				}
+				else {
+					Ai_info[shipp->ai_index].mode = umode;
+				}
+				Ai_info[shipp->ai_index].submode = submode;		
+
+				// set this guys target objnum
+				target_objp = multi_get_network_object( target_signature );
+				if ( target_objp == nullptr ){
+					Ai_info[shipp->ai_index].target_objnum = -1;
+				} else {
+					Ai_info[shipp->ai_index].target_objnum = OBJ_INDEX(target_objp);
+				}
+			}
+
+			shipp->weapon_energy = sip->max_weapon_reserve * weapon_energy_pct;
+		}		
 	}	
 
 	if(oo_flags & OO_SUPPORT_SHIP){
@@ -1856,8 +1980,8 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			Ai_info[shipp->ai_index].submode = ai_submode;
 
 			// record it for re-bashing later 
-			Oo_info.interp[net_sig_idx].cur_pack_ai_mode = ai_mode;
-			Oo_info.interp[net_sig_idx].cur_pack_ai_submode = ai_submode;
+			interp_data->cur_pack_ai_mode = ai_mode;
+			interp_data->cur_pack_ai_submode = ai_submode;
 
 			object *objp = multi_get_network_object( dock_sig );
 			if(objp != NULL){
@@ -1918,7 +2042,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 // reset the timestamp appropriately for the passed in object
 void multi_oo_reset_timestamp(net_player *pl, object *objp, int range, int in_cone)
-{
+{	mprintf(("I'm the last one to run! 27\n"));
 	int stamp = 0;	
 
 	// if this is the guy's target, 
@@ -1961,13 +2085,13 @@ void multi_oo_reset_timestamp(net_player *pl, object *objp, int range, int in_co
 
 	// reset the timestamp for this object
 	if(objp->type == OBJ_SHIP){
-		Frame_Record.player_frame_info[pl->player_id].last_sent[objp->net_signature - 1].timestamp = timestamp(stamp);
+		Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].timestamp = timestamp(stamp);
 	} 
 }
 
 // determine what needs to get sent for this player regarding the passed object, and when
 int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
-{
+{	mprintf(("I'm the last one to run! 28\n"));
 	ushort oo_flags = 0;
 	int stamp;
 	int player_index;
@@ -1985,11 +2109,11 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 		return 0;
 	}
 
-	int net_sig_idx = obj->net_signature - 1;
+	int net_sig_idx = obj->net_signature;
 
 	// determine what the timestamp is for this object
 	if(obj->type == OBJ_SHIP){
-		stamp = Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].timestamp;
+		stamp = Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].timestamp;
 	} else {
 		return 0;
 	}
@@ -2034,13 +2158,13 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 	// reset the timestamp for the next update for this guy
 	multi_oo_reset_timestamp(pl, obj, range, in_cone);
 
-	// position should be almost constant, but only if they've moved
-	if (Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].position != obj->pos) {
+	// position should be almost constant, except for ships that aren't moving.
+	if (Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].position != obj->pos) {
 		oo_flags |= OO_POS_AND_ORIENT_NEW;
 		// update the last position sent, will be done in each of the cases below.
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].position = obj->pos;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].position = obj->pos;
 	}   // same with orientation
-	else if ((obj->phys_info.rotvel != vmd_zero_vector) || obj->phys_info.rotvel != Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].rot_vel) {
+	else if (obj->phys_info.rotvel != vmd_zero_vector) {
 		oo_flags |= OO_POS_AND_ORIENT_NEW;
 	}
 
@@ -2064,9 +2188,9 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 	}	
 		
 	// maybe update hull
-	if(Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].hull != obj->hull_strength){
+	if(Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].hull != obj->hull_strength){
 		oo_flags |= (OO_HULL_NEW);
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].hull = obj->hull_strength;		
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].hull = obj->hull_strength;		
 	}
 
 	float temp_max = shield_get_max_quad(obj);
@@ -2081,15 +2205,15 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 
 	if (all_max) {
 		// shields are currently perfect, were they perfect last time?
-		if ( Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent == false){
+		if ( Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent == false){
 			// send the newly perfected shields
 			oo_flags |= OO_SHIELDS_NEW;
 		}
 		// make sure to mark it as perfect for next time.
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent = true;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent = true;
 	} // if they're not perfect, make sure they're marked as not perfect.
 	else {
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent = false;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].perfect_shields_sent = false;
 		oo_flags |= OO_SHIELDS_NEW;
 	}
 
@@ -2097,17 +2221,17 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 	ai_info *aip = &Ai_info[shipp->ai_index];
 
 	// check to see if the AI mode updated
-	if ((Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_mode != aip->mode) 
-		|| (Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_submode != aip->submode) 
-		|| (Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].target_signature != aip->target_signature)) {
+	if ((Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_mode != aip->mode) 
+		|| (Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_submode != aip->submode) 
+		|| (Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].target_signature != aip->target_signature)) {
 
 		// send, if so.
 		oo_flags |= OO_AI_NEW;
 
 		// set new values to check against later.
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_mode = aip->mode;
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_submode = aip->submode;
-		Frame_Record.player_frame_info[pl->player_id].last_sent[net_sig_idx].target_signature = aip->target_signature;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_mode = aip->mode;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].ai_submode = aip->submode;
+		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].target_signature = aip->target_signature;
 	}
 
 
@@ -2282,97 +2406,108 @@ void multi_oo_process_update(ubyte *data, header *hinfo)
 }
 
 // initialize all object update info (call whenever entering gameplay state)
-void multi_oo_gameplay_init()
-{
+void multi_oo_ship_tracker_init()
+{	mprintf(("I'm the last one to run! 29\n"));
 
-//	mprintf(("Multi_ship_record_init called.\n"));
-
-	static bool	OO_multi_inited = false;
-	if (OO_multi_inited) {
-		return;
-	}
-	else {
-		OO_multi_inited = true;
-	}
+	mprintf(("Multi_ship_record_init called.\n"));
 
 	// setup initial object update info	
+	// Part 1: Get the non-repeating parts of the struct set.
+
+	Oo_info.ref_timestamp = -1;
+	mprintf(("I'm not crashing.\n"));
+	Oo_info.ref_pos_frametime = 0;
+	Oo_info.most_recent_updated_net_signature = 0;
+	Oo_info.most_recent_frame = 0;
+	Oo_info.distance_to_most_recent = 0.0f;
+	mprintf(("I'm not crashing.\n"));
+	Oo_info.received_frametimes.clear();
+
+	Oo_info.number_of_frames = 0;
+	Oo_info.wrap_count = 0;
+	Oo_info.larger_wrap_count = 0;
+	Oo_info.cur_frame_index = 0;
+	mprintf(("I'm not crashing.\n"));
+	Oo_info.frame_timestamp_count = 0;
+	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
+		Oo_info.timestamps[i] = MAX_TIME; // This needs to be Max time (or at least some absurdly high number) for rollback to work correctly
+	}
+	Oo_info.rollback_mode = false;
+	Oo_info.rollback_wobjp.clear();
+	mprintf(("I'm not crashing.\n"));
+
+	// Part 2: Init/Reset the repeating parts of the struct. 
+	Oo_info.frame_info.clear();		
+	Oo_info.player_frame_info.clear();
+	Oo_info.interp.clear();
+
+	Oo_info.frame_info.reserve(MAX_SHIPS); // Reserving up to a reasonable number of ships here should help optimize a little bit.
+	Oo_info.player_frame_info.reserve(MAX_PLAYERS); // Reserve up to the max players
+	Oo_info.interp.reserve(MAX_SHIPS);
+
+	oo_ship_position_records temp_position_records;
+	oo_netplayer_records temp_netplayer_records;
+
+	temp_position_records.death_or_depart_frame = -1;
+	temp_position_records.initial_frame = -1;
+	mprintf(("I'm not crashing1.\n"));
+	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
+		temp_position_records.orientations[i] = vmd_identity_matrix;
+		temp_position_records.positions[i] = vmd_zero_vector;
+	}
+	mprintf(("I'm not crashing1.\n"));
+
 	int cur = 0;
+	oo_info_sent_to_players temp_sent_to_player;
+	mprintf(("I'm not crashing1.\n"));
 
-	// Get the non-repeating parts of the struct set.
-	Frame_Record.frame_timestamp_count = 0;
-	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
-		Frame_Record.timestamps[i] = -1;
-	}
-	Frame_Record.number_of_frames = 0;
-	Frame_Record.wrap_count = 0;
-	Frame_Record.larger_wrap_count = 0;
-	Frame_Record.cur_idx = 0;
-	Frame_Record.rollback_mode = false;
-	for (int i = 0; i < 12; i++){
-		Frame_Record.rollback_weapon_objnums[i] = -1;
-	}
-	
-	Frame_Record.frame_info.clear();		// Until final cleanup and testing, I'm putting this here to help facilitate testing.
-
-	// Although a memory hog, this allows us to be able to set net signatures all the way to the
-	// max of permanent net sigantures.  Perhaps this can be replaced later with a more elegant way to
-	// check for how many ships are going to be in the mission total.
-	Frame_Record.frame_info.reserve(5000); // Reserving up to the ship limit here should help optimize a little bit.
-
-	multi_frame_records temp_server_frame_record;
-	multi_player_records temp_server_last_sent;
-
-	temp_server_frame_record.death_or_depart_frame = -1;
-	temp_server_frame_record.initial_frame = -1;
-	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
-		temp_server_frame_record.orientations[i] = vmd_identity_matrix;
-		temp_server_frame_record.positions[i] = vmd_zero_vector;
-		temp_server_frame_record.rotational_velocities[i] = vmd_zero_vector;
-	}
-
-	oo_info_sent_to_player temp_sent_to_player;
 	// if the last packet sent perfect shields, we may not need to send them again.
 	//SCP_vector<ubyte> subsystems;	// See if *any* of the subsystems changed, so we have to allow for a variable number of subsystems within a variable number of ships.
 	temp_sent_to_player.timestamp = timestamp(cur);
 	temp_sent_to_player.position = vmd_zero_vector;
-	temp_sent_to_player.rot_vel = vmd_zero_vector;
 	temp_sent_to_player.hull = 0.0f;
 	temp_sent_to_player.ai_mode = 0;
 	temp_sent_to_player.ai_submode = -1;
 	temp_sent_to_player.target_signature = 0;
 	temp_sent_to_player.perfect_shields_sent = false;		
-	for (int i = 0; i < MAX_MODEL_SUBSYSTEMS; i++) {
-		temp_sent_to_player.subsystems.push_back(0.0f);
-	}
+	temp_sent_to_player.subsystems.push_back(0.0f);
+	mprintf(("I'm not crashing1.\n"));
 
-	for (int i = 0; i < 5000; i++) {
-		temp_server_last_sent.last_sent.push_back(temp_sent_to_player);
-		Frame_Record.frame_info.push_back(temp_server_frame_record);
-	}
-
-	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
-		Frame_Record.player_frame_info.push_back(temp_server_last_sent);
-	}
+	temp_netplayer_records.last_sent.push_back(temp_sent_to_player);
+	Oo_info.frame_info.push_back(temp_position_records);
 	
-	Oo_info.interp.reserve(5000);
+	mprintf(("I'm not crashing1.\n"));
+
+	for (int i = 0; i < MAX_PLAYERS; i++) {
+		Oo_info.player_frame_info.push_back(temp_netplayer_records);
+	}
+	mprintf(("I'm not crashing1.\n"));
 
 	// create a temporary struct and then stuff it for all ships.
-	interp_message_tracking temp_interp;
+	oo_packet_and_interp_tracking temp_interp;
+	mprintf(("I'm not crashing1.\n"));
 
 	temp_interp.cur_pack_pos_frame = 0;
 	temp_interp.prev_pack_pos_frame = 0;
-	temp_interp.pos_time_delta = -1.0f;
+
 	temp_interp.client_simulation_mode = true;
-	temp_interp.old_points = vmd_zero_vector;
-	temp_interp.new_points = vmd_zero_vector;
+	temp_interp.prev_packet_positionless = false;
+
+	temp_interp.pos_time_delta = -1.0f;
+	temp_interp.old_packet_position = vmd_zero_vector;
+	temp_interp.new_packet_position = vmd_zero_vector;
 	temp_interp.position_error = vmd_zero_vector;
+	mprintf(("I'm not crashing1.\n"));
 
-
-	temp_interp.old_angles = { 0.0f, 0.0f, 0.0f };
-	temp_interp.new_angles = { 0.0f, 0.0f, 0.0f };
-	temp_interp.anticipated_angles_a = { 0.0f, 0.0f, 0.0f };
-	temp_interp.anticipated_angles_b = { 0.0f, 0.0f, 0.0f };
-	temp_interp.orientation_error = { 0.0f, 0.0f, 0.0f };
+	temp_interp.angles_time_delta = -1.0f;
+	temp_interp.old_angles = vmd_zero_angles;
+	temp_interp.new_angles = vmd_zero_angles;
+	temp_interp.anticipated_angles_a = vmd_zero_angles;
+	temp_interp.anticipated_angles_b = vmd_zero_angles;
+	temp_interp.anticipated_angles_c = vmd_zero_angles;
+	temp_interp.orientation_error = vmd_zero_angles;
+	temp_interp.new_orientation = vmd_identity_matrix;
+	mprintf(("I'm not crashing1.\n"));
 
 	temp_interp.pos_spline = bez_spline();
 
@@ -2381,30 +2516,20 @@ void multi_oo_gameplay_init()
 	temp_interp.cur_pack_des_rot_vel = vmd_zero_vector;
 	temp_interp.cur_pack_ai_mode = -1;
 	temp_interp.cur_pack_ai_submode = -1;
+	mprintf(("I'm not crashing2.\n"));
 
 	temp_interp.odd_wrap = false;
 	temp_interp.most_recent_packet = -1;
-	temp_interp.minimum_packet = -1;
-	temp_interp.rot_vel_frame = -1;
 	temp_interp.hull_frame = -1;
 	temp_interp.shields_frame = -1;
 
-	for (int i = 0; i < MAX_MODEL_SUBSYSTEMS; i++) {
-		temp_interp.subsystems_frame.push_back(-1);
-	}
+	temp_interp.subsystems_frame.push_back(-1);
 
 	temp_interp.ai_frame = -1;
+	mprintf(("I'm not crashing2.\n"));
+	Oo_info.interp.push_back(temp_interp);
 
-	for (int i = 1; i < REAL_SHIP_SIG_MAX; i++) {
-		Oo_info.interp.push_back(temp_interp);
-	}
-
-	Oo_info.received_frametimes.clear();
-	Oo_info.ref_timestamp = 0;
-	Oo_info.most_recent_updated_net_signature = 0;
-	Oo_info.distance_to_most_recent = 0.0f;
-	Oo_info.most_recent_frame = 0;
-
+	mprintf(("I'm not crashing2.\n"));
 	// reset datarate stamp now
 	extern int OO_gran;
 	for(int i=0; i<MAX_PLAYERS; i++){
@@ -2513,34 +2638,34 @@ void multi_oo_send_changed_object(object *changedobj)
 
 // updates all interpolation info for a specific ship
 void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new_ori_angles, matrix* new_ori_mat, physics_info* new_phys_info, bool adjust_pos, bool newest_pos)
-{
+{ 	mprintf(("I'm the last one to run! 30\n"));
 	Assert(objp != nullptr);
 
 	if (objp == nullptr) {
 		return;
 	}
 
-	int idx = objp->net_signature - 1;
+	int net_sig_idx = objp->net_signature;
 
-	Assert(idx >= 0);
+	Assert(net_sig_idx >= 0);
 	// store and replace interpolation info
 	if (adjust_pos) {
 		// if this is the newest position packet, update everything
 		if (newest_pos) {
-			Oo_info.interp[idx].old_points = Oo_info.interp[idx].new_points;
-			Oo_info.interp[idx].new_points = *new_pos;
+			Oo_info.interp[net_sig_idx].old_packet_position = Oo_info.interp[net_sig_idx].new_packet_position;
+			Oo_info.interp[net_sig_idx].new_packet_position = *new_pos;
 
-			Oo_info.interp[idx].old_angles = Oo_info.interp[idx].new_angles;
-			Oo_info.interp[idx].new_angles = *new_ori_angles;
+			Oo_info.interp[net_sig_idx].old_angles = Oo_info.interp[net_sig_idx].new_angles;
+			Oo_info.interp[net_sig_idx].new_angles = *new_ori_angles;
 
 		} // if this is the second newest, update that instead
 		else {
-			Oo_info.interp[idx].old_points = *new_pos;
-			Oo_info.interp[idx].old_angles = *new_ori_angles;
+			Oo_info.interp[net_sig_idx].old_packet_position = *new_pos;
+			Oo_info.interp[net_sig_idx].old_angles = *new_ori_angles;
 		}
 
 		// now we'll update the interpolation splines if both points have been set.
-		if ( Oo_info.interp[idx].prev_pack_pos_frame > 0) {
+		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > 0) {
 			multi_oo_calc_interp_splines(objp, new_pos, new_ori_mat, new_phys_info);
 		}
 	}
@@ -2868,7 +2993,7 @@ int multi_oo_is_interp_object(object *objp)
 
 // interp
 void multi_oo_interp(object* objp)
-{
+{	mprintf(("I'm the last one to run! 33\n"));
 	// make sure its a valid ship
 	Assert(Game_mode & GM_MULTIPLAYER);
 	if (objp->type != OBJ_SHIP) {
@@ -2884,24 +3009,35 @@ void multi_oo_interp(object* objp)
 			ship_fire_primary(objp, 1, 0);
 		}
 	}
-	int net_sig_idx = objp->net_signature - 1;
+	mprintf(("HELP ME!!1"));
+	int net_sig_idx = objp->net_signature;
 
-	interp_message_tracking* interp = &Oo_info.interp[net_sig_idx];
 
-	Verify(interp != nullptr);
 
-	float packet_delta = interp->pos_time_delta;
+	oo_packet_and_interp_tracking* interp_data = &Oo_info.interp[net_sig_idx];
+	mprintf(("HELP ME!!2"));
+
+	Verify(interp_data != nullptr);
+
+	float packet_delta = interp_data->pos_time_delta;
+	mprintf(("HELP ME!!3"));
 
 	// if this ship doesn't have enough data points yet, pretend it's a normal ship and skip it.
-	if (interp->prev_pack_pos_frame == 0) {
+	if (interp_data->prev_pack_pos_frame == 0) {
 			physics_sim_vel(&objp->pos, &objp->phys_info, flFrametime, &objp->orient);
 			physics_sim_rot(&objp->orient, &objp->phys_info, flFrametime);
-	
+			mprintf(("HELP ME!!4"));
+
 	} // once there are enough data points, we begin interpolating.
 	else {
-		int temp_numerator = timestamp() - interp->pos_timestamp + Oo_info.received_frametimes[interp->cur_pack_pos_frame];
+		mprintf(("HELP ME!!5"));
+
+		int temp_numerator = timestamp() - interp_data->pos_timestamp + Oo_info.received_frametimes[interp_data->cur_pack_pos_frame];
+		mprintf(("HELP ME!!6"));
+
 		// Calculate how much time has passed to see if we're about to overshoot the current packet.	
 		float time_elapsed = i2fl(temp_numerator) / TIMESTAMP_FREQUENCY;
+		mprintf(("HELP ME!!7"));
 
 		// Cyborg17 - Here's the new timing calculation: we subtract the last packet's arrival time 
 		// from the current timestamp to see how long it's been and add 1 the frametime from the server, and 
@@ -2909,32 +3045,44 @@ void multi_oo_interp(object* objp)
 		// percent that tells us, for example, "35% of the time has elapsed until when we expect the next packet."
 		// adding the 1 frame brings the client simulation closer to the server simulation because of ping
 		float time_factor = (time_elapsed / packet_delta) + 1.0f;
+		mprintf(("HELP ME!!8"));
 
 		// if there was no movement, bash bash bash
-		if (Oo_info.interp[net_sig_idx].prev_packet_no_pos) {
-			objp->pos = Oo_info.interp[net_sig_idx].new_points;
-			objp->orient = Oo_info.interp[net_sig_idx].new_orientation;
+		if (interp_data->prev_packet_positionless) {
+			mprintf(("HELP ME!!9"));
+
+			objp->pos = interp_data->new_packet_position;
+			objp->orient = interp_data->new_orientation;
 		} // Overshoting in this frame or some edge case bug. The values from the packet are still being used, so just sim it regularly.
 		else if (time_factor > 4.0f || time_factor < 0.0f) {
+			mprintf(("HELP ME!!10"));
+
 			// Run the simulation the best we can.
 			// if transitioning to the normal, we need to jump to the end of the simulated points and then simulate forward some if there's extra time. 
 			float regular_sim_delta;
 
-			if (!interp->client_simulation_mode) {
-				interp->client_simulation_mode = true;
-				objp->pos = interp->new_points;
-				objp->orient = interp->new_orientation;
+			if (!interp_data->client_simulation_mode) {
+				mprintf(("HELP ME!!11"));
+
+				interp_data->client_simulation_mode = true;
+				objp->pos = interp_data->new_packet_position;
+				objp->orient = interp_data->new_orientation;
 				regular_sim_delta = time_elapsed - (2 * packet_delta);
+				mprintf(("HELP ME!!12"));
 
 			} else {
+				mprintf(("HELP ME!!13"));
+
 				regular_sim_delta = flFrametime;
 			}
 			// Continue simulating if we have time that we need to simulate and exclude fake values.
 			if (regular_sim_delta > 0.001f && regular_sim_delta < 0.500f) {
+				mprintf(("HELP ME!!14"));
 
 				// make sure to bash desired velocity and rotational velocity in this case.
-				objp->phys_info.desired_vel = interp->cur_pack_des_vel;
-				objp->phys_info.desired_rotvel = interp->cur_pack_des_rot_vel;
+				objp->phys_info.desired_vel = interp_data->cur_pack_des_vel;
+				objp->phys_info.desired_rotvel = interp_data->cur_pack_des_rot_vel;
+				mprintf(("HELP ME!!15"));
 
 				physics_sim_vel(&objp->pos, &objp->phys_info, regular_sim_delta, &objp->orient);
 				physics_sim_rot(&objp->orient, &objp->phys_info, regular_sim_delta);
@@ -2943,64 +3091,92 @@ void multi_oo_interp(object* objp)
 
 		} // valid time factors.
 		else {
+			mprintf(("HELP ME!!16"));
 
-			interp->client_simulation_mode = false;
+			interp_data->client_simulation_mode = false;
 
 			// Cyborg17 - we are no longer blending two interpolation curves.  I'm not sure *how*, but they were somehow making it look 
 			// less erratic when the timing was broken in the first place. 
+			mprintf(("HELP ME!!17"));
+
 			float u = (time_factor) / 4.0f;
 			vec3d interp_point;
+			mprintf(("HELP ME!!18"));
 
-			interp->pos_spline.bez_get_point(&interp_point, u);
+
+			interp_data->pos_spline.bez_get_point(&interp_point, u);
+			mprintf(("HELP ME!!19"));
 
 			// now to "remove" error that the client caused during the last round of interpolation.
 			// Bashing the error would be the alternative to this.
 			if (time_factor < 2.0f) {
+				mprintf(("HELP ME!!20"));
+
 				vec3d remove_error_vector = vmd_zero_vector;
 				float temp_error_factor = time_factor * 0.5f; // .5 and 2 are multiplicative inverses.
+				mprintf(("HELP ME!!21"));
 
-				vm_vec_copy_scale(&remove_error_vector, &interp->position_error, temp_error_factor);
+				vm_vec_copy_scale(&remove_error_vector, &interp_data->position_error, temp_error_factor);
 				vm_vec_add2(&interp_point, &remove_error_vector);
 			}
+			mprintf(("HELP ME!!22"));
 
 			// set the new position.
 			objp->pos = interp_point;
 
 			// Now rotational interpolation
 			// exactly on the middle point, save some time and just put the ship on that orientation.
+			mprintf(("HELP ME!!23"));
+
 			if (time_factor == 2.0f) {
-				vm_angles_2_matrix(&objp->orient, &interp->anticipated_angles_a);
+				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_a);
 				vm_orthogonalize_matrix(&objp->orient);
+				mprintf(("HELP ME!!24"));
 
 			} // Same for being exactly on the end point
 			else if (time_factor == 3.0f) {
-				vm_angles_2_matrix(&objp->orient, &interp->anticipated_angles_b);
+				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_b);
 				vm_orthogonalize_matrix(&objp->orient);
+				mprintf(("HELP ME!!25"));
+
 			}
 			else if (time_factor == 4.0f) {
-				vm_angles_2_matrix(&objp->orient, &interp->anticipated_angles_c);
+				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_c);
 				vm_orthogonalize_matrix(&objp->orient);
+				mprintf(("HELP ME!!26"));
+
 				// in case we have to do our interpolation. We cannot do anything if it's less than 1 because those are actually old values that *should* never happen.
 			} // This case is already taken care of because the original packet orientation is bashed already, anyway.
 			else if (time_factor > 1.0f) {
 				angles temp_angles, old_angles, new_angles;
+				mprintf(("HELP ME!!27"));
 
 				// Between packet and first interpolated angles
 				if (time_factor < 2.0f) {
-					old_angles = interp->new_angles;
-					new_angles = interp->anticipated_angles_a;
+					mprintf(("HELP ME!!28"));
+					old_angles = interp_data->new_angles;
+					new_angles = interp_data->anticipated_angles_a;
 					time_factor--;
+
+
 				} // between interpolated angles a and b
 				else if (time_factor < 3.0f) {
-					old_angles = interp->anticipated_angles_a;
-					new_angles = interp->anticipated_angles_b;
+					mprintf(("HELP ME!!29"));
+
+					old_angles = interp_data->anticipated_angles_a;
+					new_angles = interp_data->anticipated_angles_b;
 					time_factor -= 2;
+
 				} // between interpolated angles b and c
 				else if (time_factor < 4.0f) {
-					old_angles = interp->anticipated_angles_b;
-					new_angles = interp->anticipated_angles_c;
+					mprintf(("HELP ME!!30"));
+
+					old_angles = interp_data->anticipated_angles_b;
+					new_angles = interp_data->anticipated_angles_c;
 					time_factor -= 3;
+
 				}
+				mprintf(("HELP ME!!31"));
 
 				vm_interpolate_angles_quick(&temp_angles, &old_angles, &new_angles, time_factor);
 				vm_angles_2_matrix(&objp->orient, &temp_angles);
@@ -3008,22 +3184,24 @@ void multi_oo_interp(object* objp)
 			}
 		}
 	}
+	mprintf(("HELP ME!!32"));
 
 	// duplicate the rest of the physics engine's calls here to make the simulation more exact.
 	objp->phys_info.speed = vm_vec_mag(&objp->phys_info.vel);							
 	objp->phys_info.fspeed = vm_vec_dot(&objp->orient.vec.fvec, &objp->phys_info.vel);
+	mprintf(("\nSAFE!!!\n"));
+
 }
 
 void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info)
-{
+{	mprintf(("I'm the last one to run! 34\n"));
 	Assert(objp != nullptr);
 
 	if (objp == nullptr) {
 		return;
 	}
 
-	ushort net_sig_idx = objp->net_signature - 1;
-	angles ang_estimated;
+	ushort net_sig_idx = objp->net_signature;
 	
 	// find the float time version of how much time has passed
 	float delta = multi_oo_calc_pos_time_difference(net_sig_idx);
@@ -3038,7 +3216,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	// Do the velocity calculation and set it in the physics info.
 	vec3d global_velocity;
 
-	vm_vec_sub(&global_velocity, &Oo_info.interp[net_sig_idx].new_points, &Oo_info.interp[net_sig_idx].old_points);
+	vm_vec_sub(&global_velocity, &Oo_info.interp[net_sig_idx].new_packet_position, &Oo_info.interp[net_sig_idx].old_packet_position);
 	vm_vec_scale(&global_velocity, 1.0f/delta);
 
 	// Get rid of any rubberbanding here
@@ -3051,7 +3229,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 		// change error to local coordiantes.
 		vm_vec_rotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
 		// change last received position to local coordinates.
-		vm_vec_rotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_points, new_orient);
+		vm_vec_rotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_packet_position, new_orient);
 		// get rid of rubberbanding for each direction.  If there's any disagreement in the signs, just get rid of it and go with the current ship location.
 		// forward/back.
 		if ( (local_error.xyz.z < 0.0f && local_vel.xyz.z > 0.0f) || (local_error.xyz.z > 0.0f && local_vel.xyz.z < 0.0f) ) {			
@@ -3075,7 +3253,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
 		}
 		// store "new_point"
-		vm_vec_unrotate(&Oo_info.interp[net_sig_idx].new_points, &local_new_position, new_orient);
+		vm_vec_unrotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
 	}
 
 	// get the spline representing where this new point tells us we'd be heading
@@ -3088,12 +3266,13 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	// This is to allow for the time period to be even between the three interpolation points.
 	// All angles will be recorded because our "slerp" function is not all that great, honestly.
 
-	a = Oo_info.interp[net_sig_idx].old_points;
-	b = Oo_info.interp[net_sig_idx].new_points; 
+	a = Oo_info.interp[net_sig_idx].old_packet_position;
+	b = Oo_info.interp[net_sig_idx].new_packet_position; 
 	m_copy = *new_orient;
 	p_copy = *new_phys_info;
 	p_copy.vel = global_velocity;
 
+	angles ang_estimated;
 	// Calculate up to 1 delta past the packet, then store b as point two in the bezier, and the angles.
 	physics_sim(&b, &m_copy, &p_copy, delta);			
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
@@ -3129,7 +3308,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 
 // Calculates how much time has gone by between the two most recent frames 
 float multi_oo_calc_pos_time_difference(int net_sig_idx) {
-
+	mprintf(("I'm the last one to run! 35\n"));
 	int old_frame = Oo_info.interp[net_sig_idx].prev_pack_pos_frame;
 	int new_frame = Oo_info.interp[net_sig_idx].cur_pack_pos_frame;
 

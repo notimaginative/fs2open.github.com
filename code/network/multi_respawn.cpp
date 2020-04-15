@@ -326,7 +326,6 @@ int multi_respawn_common_stuff(p_object *pobjp, ushort net_sig)
 	int objnum, team, slot_index;
 	object *objp;
 	ship *shipp;
-	int idx;
 
 	// create the object
 	objnum = parse_create_object(pobjp);

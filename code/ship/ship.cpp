@@ -9607,6 +9607,10 @@ int ship_create(matrix* orient, vec3d* pos, int ship_type, const char* ship_name
 		} else {
 			multi_ship_record_add_ship_client(objnum);
 		}
+
+	// Start up stracking for this ship in multi.
+	if (Game_mode & (GM_MULTIPLAYER)) {
+		multi_ship_record_add_ship(objnum);
 	}
 
 	// Set time when ship is created
@@ -11382,8 +11386,14 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 								continue;
 							}
 
+							// maybe add this weapon to the list of those we need to roll forward
+							if (Game_mode & GM_MULTIPLAYER && multi_ship_record_get_rollback_wep_mode()) {
+								multi_ship_record_add_rollback_wep(weapon_objnum);
+							}
+
 							winfo_p = &Weapon_info[Weapons[Objects[weapon_objnum].instance].weapon_info_index];
 							has_fired = true;
+
 
 							weapon_set_tracking_info(weapon_objnum, OBJ_INDEX(obj), aip->target_objnum, aip->current_target_is_locked, aip->targeted_subsys);				
 
@@ -11517,8 +11527,8 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	
 	// if multiplayer and we're client-side firing, send the packet
 	if(Game_mode & GM_MULTIPLAYER){
-		// if I'm a Host send a primary fired packet packet
-		if(MULTIPLAYER_MASTER) {
+		// if I'm a Host send a primary fired packet packet if it's brand new
+		if(MULTIPLAYER_MASTER && !multi_ship_record_get_rollback_wep_mode()) {
 		send_NEW_primary_fired_packet(shipp, banks_fired);
 		// or if I'm a client, and it is my ship send it for rollback on the server.
 		} else if (MULTIPLAYER_CLIENT && (shipp == Player_ship)) {

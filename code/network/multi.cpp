@@ -322,9 +322,6 @@ void multi_level_init()
 	// initialize all netgame timestamps
 	multi_reset_timestamps();
 
-	// initialize object update system and frame tracking.
-	multi_oo_gameplay_init();
-
 	// flush psnet sockets
 	psnet_flush();
 }
@@ -856,8 +853,8 @@ void process_packet_normal(ubyte* data, header *header_info)
 			process_reinforcement_avail( data, header_info );
 			break;
 
-		case PRIMARY_FIRED_NEW:
-			process_NEW_primary_fired_packet(data, header_info);
+		case LINEAR_WEAPON_FIRED:
+			process_non_homing_fired_packet(data, header_info);
 			break;
 
 		case COUNTERMEASURE_NEW:
@@ -1302,7 +1299,7 @@ void multi_do_frame()
 	// process any tracker messages
 	multi_fs_tracker_process();
 
-	// Cyborg17 update the new frame recording system for accurate client shots, can safely go after everything else in multi.
+	// Cyborg17 update the new frame recording system for accurate client shots, needs to go after most everything else in multi.
 	if (Game_mode & GM_IN_MISSION) {
 		multi_ship_record_increment_frame();
 	}
@@ -1791,9 +1788,6 @@ void multi_reset_timestamps()
 
 	// reset standalone gui timestamps (these are not game critical, so there is not much danger)
 	std_reset_timestamps();
-
-	// initialize all object update timestamps
-	multi_oo_gameplay_init();
 }
 
 // netgame debug flags for debug console stuff
