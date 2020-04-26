@@ -321,7 +321,7 @@ void multi_respawn_wing_stuff(ship *shipp)
 	hud_set_wingman_status_alive(shipp->wing_status_wing_index, shipp->wing_status_wing_pos);
 }
 
-int multi_respawn_common_stuff(p_object *pobjp, ushort net_sig)
+int multi_respawn_common_stuff(p_object *pobjp)
 {
 	int objnum, team, slot_index;
 	object *objp;
@@ -338,8 +338,6 @@ int multi_respawn_common_stuff(p_object *pobjp, ushort net_sig)
 	Assert( team != -1 );
 	Assert( slot_index != -1 );
 
-	// reset object update stuff
-	multi_reset_oo_info(net_sig);
 
 	// change the ship type and the weapons
 	if (team != -1 && slot_index != -1) {
@@ -351,6 +349,9 @@ int multi_respawn_common_stuff(p_object *pobjp, ushort net_sig)
 	if(Netgame.type_flags & NG_TYPE_TEAM){
 		multi_team_mark_ship(&Ships[Objects[objnum].instance]);
 	}
+
+	// need to make sure that we will update this object and that the frame tracker knows this is a valid ship again.
+	multi_oo_respawn_reset_info(objp->net_signature);
 
 	pobjp->respawn_count++;
 
@@ -371,7 +372,7 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if(pobjp == NULL){
 		return;
 	}
-	objnum = multi_respawn_common_stuff(pobjp, net_sig);
+	objnum = multi_respawn_common_stuff(pobjp);
 
 	Assert( objnum != -1 );
 	objp = &Objects[objnum];
@@ -396,6 +397,10 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	pl->m_player->objnum = objnum;
 	if ( pl == Net_player ) {
 		object *oldplr = Player_obj;
+
+		// Cyborg17 - Despite the fact that the object and ship are getting deleted below, unless the net_signature is cleared here
+		// respawning in a rollback enabled game will crash the server.
+		oldplr->net_signature = 0;
 
 		Player_obj = objp;
 		Player_ship = shipp;
@@ -483,7 +488,7 @@ void multi_respawn_ai( p_object *pobjp )
 	object *objp;
 
 	// create the object and change the ship type
-	objnum = multi_respawn_common_stuff( pobjp, pobjp->net_signature );
+	objnum = multi_respawn_common_stuff( pobjp);
 	objp = &Objects[objnum];
 
 	// be sure the the OF_PLAYER_SHIP flag is unset, and the could be player flag is set

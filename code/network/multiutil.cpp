@@ -730,8 +730,6 @@ void multi_assign_player_ship( int net_player_num, object *objp,int ship_class )
 		Net_players[net_player_num].s_info.eye_orient = objp->orient;
 	}
 
-	// zero update info	
-	multi_reset_oo_info(objp->net_signature);
 }
 
 // -------------------------------------------------------------------------------------------------

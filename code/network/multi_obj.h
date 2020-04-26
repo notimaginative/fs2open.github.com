@@ -37,8 +37,8 @@ struct weapon;
 #define OOC_AFTERBURNER_ON			(1<<7)
 // NOTE: no additional flags here unless it's sent in an extra data byte
 
-// Cyborg17, Server will be tracking the last two seconds of frames
-#define MAX_FRAMES_RECORDED		240
+// Cyborg17, Server will be tracking only the last second of frames
+#define MAX_FRAMES_RECORDED		120
 #define PRIMARY_PACKET_CUTOFF			2000
 
 // ---------------------------------------------------------------------------------------------------
@@ -48,9 +48,6 @@ struct weapon;
 
 // Add a new ship *ON IN-GAME SHIP CREATION* to the tracking struct
 void multi_ship_record_add_ship(int obj_num);
-
-// Mark when a ship died or departed....
-void multi_ship_record_mark_as_dead_or_departed(int shipnum);
 
 // Update the tracking struct whenver the object is updated in-game
 void multi_ship_record_update_all();
@@ -87,7 +84,7 @@ void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_o
 // ULTIMATE TODO, write new function that manages collision detection for inbetween frames.
 
 // Creates a weapon and adds it to the Frame Records so that we can  
-void multi_ship_record_create_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame);
+void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id);
 
 // Set multi to rollback mode.
 void multi_ship_record_set_rollback_wep_mode(bool enable);
@@ -118,7 +115,7 @@ int multi_client_lookup_frame_timestamp();
 int multi_client_lookup_current_frametime();
 
 // reset all the necessary info for respawning player.
-void multi_reset_oo_info(ushort net_sig);
+void multi_oo_respawn_reset_info(ushort net_sig);
 
 // ---------------------------------------------------------------------------------------------------
 // OBJECT UPDATE FUNCTIONS
