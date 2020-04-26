@@ -477,7 +477,13 @@ void obj_snd_do_frame()
 		gs = gamesnd_get_game_sound(osp->id);
 
 		obj_snd_source_pos(&source_pos, osp);
+
+		mprintf(("\n\n\n\n\nTracing, source_pos is %f %f %f \n", source_pos.xyz.x, source_pos.xyz.y, source_pos.xyz.z));
 		distance = vm_vec_dist_quick( &source_pos, &View_position );
+		mprintf(("View_position is %f %f %f \n", View_position.xyz.x, View_position.xyz.y, View_position.xyz.z));
+
+
+		mprintf(("Tracing, distance is %f \n", distance));
 
 		// how much extra distance do we add before attentuation?
 		add_distance = 0.0f;

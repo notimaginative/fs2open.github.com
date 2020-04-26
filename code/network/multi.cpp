@@ -854,6 +854,7 @@ void process_packet_normal(ubyte* data, header *header_info)
 			break;
 
 		case LINEAR_WEAPON_FIRED:
+			mprintf(("I'M NOT GETTING IT.  PSYCH!\n"));
 			process_non_homing_fired_packet(data, header_info);
 			break;
 

@@ -478,7 +478,7 @@ void send_reinforcement_avail( int rnum );
 void process_reinforcement_avail( ubyte *data, header *hinfo );
 
 // new primary fired info
-void send_non_homing_fired_packet(ship *shipp, int banks_fired);
+void send_non_homing_fired_packet(ship *shipp, int banks_fired, bool secondary = false);
 void process_non_homing_fired_packet(ubyte *data, header *hinfo);
 
 // new countermeasure fired info
