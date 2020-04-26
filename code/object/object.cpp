@@ -620,6 +620,7 @@ void obj_delete(int objnum)
 		} else {
 			// we need to be able to delete GHOST objects in multiplayer to allow for player respawns.
 			nprintf(("Network","Deleting GHOST object\n"));
+			objp->net_signature = 0;
 		}		
 		break;
 	case OBJ_OBSERVER:
@@ -786,7 +787,9 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 	}
 
 	// single player and multiplayer masters do all of the following
-	if ( !MULTIPLAYER_CLIENT ) {		
+	if ( !MULTIPLAYER_CLIENT 
+		// Cyborg17 - except clients now fire dumbfires for rollback on the server
+		|| !(Weapon_info[shipp->weapons.secondary_bank_weapons[shipp->weapons.current_secondary_bank]].is_homing())) {		
 		if ( ci.fire_secondary_count ) {
 			ship_fire_secondary( objp );
 

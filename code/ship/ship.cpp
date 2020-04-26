@@ -10731,7 +10731,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	if(obj == NULL){
 		return 0;
 	}
-
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("i\n"));
+	}
 	// in the case where the server is an observer, he can fire (which) would be bad - unless we do this.
 	if( obj->type == OBJ_OBSERVER){
 		return 0;
@@ -10743,7 +10745,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	if((obj->type != OBJ_SHIP) || (n < 0) || (n >= MAX_SHIPS) || (Ships[n].objnum != OBJ_INDEX(obj))){
 		return 0;
 	}
-	
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("ii\n"));
+	}
+
 	shipp = &Ships[n];
 	swp = &shipp->weapons;
 
@@ -10756,6 +10761,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	}
 	sip = &Ship_info[shipp->ship_info_index];
 	aip = &Ai_info[shipp->ai_index];
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("iii\n"));
+	}
 
 	if ( swp->num_primary_banks <= 0 ) {
 		return 0;
@@ -10772,6 +10780,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	}
 
 	sound_played = gamesnd_id();
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("iiii\n"));
+	}
 
 	// Fire the correct primary bank.  If primaries are linked (SF_PRIMARY_LINKED set), then fire 
 	// both primary banks.
@@ -10787,6 +10798,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	if (num_primary_banks < 1){
 		return 0;
 	}
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("iiiii\n"));
+	}
 
 	// if we're firing stream weapons, but the trigger is not down, do nothing
 	if(stream_weapons && !(shipp->flags[Ship_Flags::Trigger_down])){
@@ -10797,12 +10811,18 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 		for(i = 0; i<swp->num_primary_banks; i++){
 			if(i!=swp->current_primary_bank)ship_stop_fire_primary_bank(obj, i);
 		}
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("i2\n"));
+	}
 
 	// lets start gun convergence / autoaim code from here - Wanderer
 	has_converging_autoaim = ((sip->aiming_flags[Ship::Aiming_Flags::Autoaim_convergence] || (The_mission.ai_profile->player_autoaim_fov[Game_skill_level] > 0.0f && !( Game_mode & GM_MULTIPLAYER ))) && aip->target_objnum != -1);
 	has_autoaim = ((has_converging_autoaim || (sip->aiming_flags[Ship::Aiming_Flags::Autoaim])) && aip->target_objnum != -1);
 	needs_target_pos = ((has_autoaim || (sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence])) && aip->target_objnum != -1);
-	
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("ii\n"));
+	}
+
 	if (needs_target_pos) {
 		if (has_autoaim) {
 			autoaim_fov = MAX(shipp->autoaim_fov, The_mission.ai_profile->player_autoaim_fov[Game_skill_level]);
@@ -10820,6 +10840,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 		dist_to_target = vm_vec_dist_quick(&target_position, &obj->pos);
 	}
+	if (multi_ship_record_get_rollback_wep_mode()) {
+		mprintf(("iii\n"));
+	}
 
 	for ( i = 0; i < num_primary_banks; i++ ) {		
 		// Goober5000 - allow more than two banks
@@ -10827,6 +10850,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 		
 		weapon_idx = swp->primary_bank_weapons[bank_to_fire];
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iiii2\n"));
+		}
 
 		// why would a ship try to fire a weapon that doesn't exist?
 		Assert( weapon_idx >= 0 && weapon_idx < weapon_info_size());
@@ -10842,6 +10868,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 		}
 
 		weapon_info* winfo_p = &Weapon_info[weapon_idx];
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iiiii2\n"));
+		}
 
 		if (needs_target_pos) {
 			target_velocity_vec = Objects[aip->target_objnum].phys_info.vel;
@@ -10864,29 +10893,43 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			if (shipp->primary_rotate_rate[bank_to_fire] < winfo_p->weapon_submodel_rotate_vel)
 				continue;
 		}
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("i3\n"));
+		}
+
+
 		// if this is a targeting laser, start it up   ///- only targeting laser if it is tag-c, otherwise it's a fighter beam -Bobboau
 		if((winfo_p->wi_flags[Weapon::Info_Flags::Beam]) && (winfo_p->tag_level == 3) && (shipp->flags[Ship_Flags::Trigger_down]) && (winfo_p->b_info.beam_type == BEAM_TYPE_C) ){
 			ship_start_targeting_laser(shipp);
 			continue;
 		}
 
-		// if we're firing stream weapons and this is a non stream weapon, skip it
-		if(stream_weapons && !(winfo_p->wi_flags[Weapon::Info_Flags::Stream])){
-			continue;
-		}
-		// if we're firing non stream weapons and this is a stream weapon, skip it
-		if(!stream_weapons && (winfo_p->wi_flags[Weapon::Info_Flags::Stream])){
-			continue;
+		// Cyborg17 - In rollback mode we don't need to worry about stream weapons or timestamps, because we are recreating an exact shot, anywway.
+		if (!(multi_ship_record_get_rollback_wep_mode())) {
+			// if we're firing stream weapons and this is a non stream weapon, skip it
+			if (stream_weapons && !(winfo_p->wi_flags[Weapon::Info_Flags::Stream])) {
+				continue;
+			}
+			// if we're firing non stream weapons and this is a stream weapon, skip it
+			if (!stream_weapons && (winfo_p->wi_flags[Weapon::Info_Flags::Stream])) {
+				continue;
+			}
+			// only non-multiplayer clients (single, multi-host) need to do timestamp checking
+			if ( !timestamp_elapsed(swp->next_primary_fire_stamp[bank_to_fire]) ) {
+				continue;
+			}
 		}
 
-		// only non-multiplayer clients (single, multi-host) need to do timestamp checking
-		if ( !timestamp_elapsed(swp->next_primary_fire_stamp[bank_to_fire]) ) {
-			continue;
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("ii3\n"));
 		}
 
 		// if weapons are linked and this is a nolink weapon, skip it
 		if (shipp->flags[Ship_Flags::Primary_linked] && winfo_p->wi_flags[Weapon::Info_Flags::Nolink]) {
 			continue;
+		}
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iii3\n"));
 		}
 
 		// do timestamp stuff for next firing time
@@ -10910,12 +10953,19 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 				next_fire_delay *= aip->ai_ship_fire_delay_scale_hostile;
 			}
 		}
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iiii3\n"));
+		}
 
 		polymodel *pm = model_get( sip->model_num );
 		
 		// Goober5000 (thanks to _argv[-1] for the original idea)
 		if ( (num_primary_banks > 1) &&  !(winfo_p->wi_flags[Weapon::Info_Flags::No_linked_penalty]) && !(The_mission.ai_profile->flags[AI::Profile_Flags::Disable_linked_fire_penalty]) )
 		{
+			if (multi_ship_record_get_rollback_wep_mode()) {
+				mprintf(("iiiii3\n"));
+			}
+
 			int effective_primary_banks = 0;
 			for (int it = 0; it < num_primary_banks; it++)
 			{
@@ -10927,12 +10977,20 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			next_fire_delay *= 1.0f + (effective_primary_banks - 1) * 0.5f;		//	50% time penalty if banks linked
 		}
 
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("i4\n"));
+		}
+
+
 		if (winfo_p->fof_spread_rate > 0.0f)
 		{
 			//Adjust the primary_bank_fof_cooldown based on how long it's been since the last shot. 
 			float reset_amount = (timestamp_until(swp->last_primary_fire_stamp[bank_to_fire]) / 1000.0f) * winfo_p->fof_reset_rate;
 			swp->primary_bank_fof_cooldown[bank_to_fire] += winfo_p->fof_spread_rate + reset_amount;
 			CLAMP(swp->primary_bank_fof_cooldown[bank_to_fire], 0.0f, 1.0f);
+		}
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("ii4\n"));
 		}
 
 		//	MK, 2/4/98: Since you probably were allowed to fire earlier, but couldn't fire until your frame interval
@@ -10960,6 +11018,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			swp->next_primary_fire_stamp[bank_to_fire] = timestamp((int)(next_fire_delay));
 			swp->last_primary_fire_stamp[bank_to_fire] = timestamp();
 		}
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iii4\n"));
+		}
 
 		if (sip->flags[Ship::Info_Flags::Dyn_primary_linking] ) {
 			Assert(pm->gun_banks[bank_to_fire].num_slots != 0);
@@ -10984,6 +11045,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			ship_stop_fire_primary_bank(obj, bank_to_fire);
 			continue;
 		}		
+		if (multi_ship_record_get_rollback_wep_mode()) {
+			mprintf(("iiii4\n"));
+		}
 
 		if ( pm->n_guns > 0 ) {
 			int num_slots = pm->gun_banks[bank_to_fire].num_slots;
@@ -10997,6 +11061,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			if (needs_target_pos) {
 				float time_to_target, angle_to_target;
 				vec3d last_delta_vec;
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iiiii4\n"));
+				}
 
 				time_to_target = 0.0f;
 
@@ -11014,6 +11081,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 					if (angle_to_target < autoaim_fov)
 						in_automatic_aim_fov = true;
 				}
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("i5\n"));
+				}
 
 				dist_to_aim = vm_vec_mag_quick(&plr_to_target_vec);
 
@@ -11025,7 +11095,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 					dist_to_aim = sip->minimum_convergence_distance;
 				}
 			}
-			
+			if (multi_ship_record_get_rollback_wep_mode()) {
+				mprintf(("ii5\n"));
+			}
+
 			if(winfo_p->wi_flags[Weapon::Info_Flags::Beam]){		// the big change I made for fighter beams, if there beams fill out the Fire_Info for a targeting laser then fire it, for each point in the weapon bank -Bobboau
 				float t;
 				if (winfo_p->burst_shots > swp->burst_counter[bank_to_fire]) {
@@ -11048,6 +11121,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 					}
 				}else{
 					points = num_slots;
+				}
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iii5\n"));
 				}
 
 				if ( shipp->weapon_energy < points*winfo_p->energy_consumed*flFrametime)
@@ -11110,6 +11186,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 			else	//if this isn't a fighter beam, do it normally -Bobboau
 			{
 				int points = 0, numtimes = 1;
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iiii5\n"));
+				}
 
 				// ok if this is a cycling weapon use shots as the number of points to fire from at a time
 				// otherwise shots is the number of times all points will be fired (used mostly for the 'shotgun' effect)
@@ -11128,6 +11207,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 				// there may be a reason why you want to have ballistics consume energy.  Perhaps
 				// you can't fire too many too quickly or they'll overheat.  If not, just set
 				// the weapon's energy_consumed to 0 and it'll work just fine. - Goober5000
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iiiii5\n"));
+				}
 
 				// fail unless we're forcing (energy based primaries)
 				if ( (shipp->weapon_energy < points*numtimes * winfo_p->energy_consumed)			//was num_slots
@@ -11142,6 +11224,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 					continue;
 				}
 				// moved the above to here to use points instead of num_slots for energy consumption check
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("i6\n"));
+				}
 
 				// ballistics support for primaries - Goober5000
 				if ( winfo_p->wi_flags[Weapon::Info_Flags::Ballistic] )
@@ -11157,6 +11242,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 					// weapons, we might or might not check ammo counts depending on game mode, who is firing,
 					// and if I am a client in multiplayer
 					int check_ammo = 1;
+					if (multi_ship_record_get_rollback_wep_mode()) {
+						mprintf(("ii6\n"));
+					}
 
 					if ( MULTIPLAYER_CLIENT && (obj != Player_obj) )
 					{
@@ -11176,7 +11264,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 						}
 						continue;
 					}
-					
+					if (multi_ship_record_get_rollback_wep_mode()) {
+						mprintf(("ii6\n"));
+					}
+
 					// deplete ammo
 					if ( Weapon_energy_cheat == 0 )
 					{
@@ -11189,6 +11280,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 							swp->primary_bank_ammo[bank_to_fire] = 0;
 						}
 					}
+				}
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iii6\n"));
 				}
 
 				// now handle the energy as usual
@@ -11203,6 +11297,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 				vec3d total_impulse;
 				vec3d *firepoint_list;
 				size_t current_firepoint = 0;
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iiii6\n"));
+				}
 
 				if (winfo_p->wi_flags[Weapon::Info_Flags::Apply_Recoil]){
 					firepoint_list = new vec3d[numtimes * points];
@@ -11210,15 +11307,24 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 				} else {
 					firepoint_list = nullptr;
 				}
+				if (multi_ship_record_get_rollback_wep_mode()) {
+					mprintf(("iiiii6\n"));
+				}
 
 				for ( w = 0; w < numtimes; w++ ) {
 					polymodel *weapon_model = NULL;
 					if(winfo_p->external_model_num >= 0) 
 						weapon_model = model_get(winfo_p->external_model_num);
+					if (multi_ship_record_get_rollback_wep_mode()) {
+						mprintf(("i7\n"));
+					}
 
 					if (weapon_model)
 						if ((weapon_model->n_guns <= swp->external_model_fp_counter[bank_to_fire]) || (swp->external_model_fp_counter[bank_to_fire] < 0))
 							swp->external_model_fp_counter[bank_to_fire] = 0;
+					if (multi_ship_record_get_rollback_wep_mode()) {
+						mprintf(("ii7\n"));
+					}
 
 					for ( j = 0; j < points; j++ ) {
 						int pt; //point
@@ -11226,6 +11332,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 							pt = (shipp->last_fired_point[bank_to_fire]+1)%num_slots;
 						}else{
 							pt = j;
+						}
+						if (multi_ship_record_get_rollback_wep_mode()) {
+							mprintf(("iii7\n"));
 						}
 
 						int sub_shots = 1;
@@ -11244,6 +11353,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 									vm_vec_add2(&pnt, &weapon_model->gun_banks[0].pnt[s]);
 								}
 							}
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iiii7\n"));
+							}
 
 							vm_vec_unrotate(&gun_point, &pnt, &obj->orient);
 							vm_vec_add(&firing_pos, &gun_point, &obj->pos);
@@ -11257,6 +11369,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 								V SIF convergence
 								no convergence or autoaim
 							*/
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iiiii7\n"));
+							}
+
 							if (has_autoaim && in_automatic_aim_fov) {
 								vec3d firing_vec;
 
@@ -11272,7 +11388,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 							} else if ((sip->aiming_flags[Ship::Aiming_Flags::Std_convergence]) || ((sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence]) && (aip->target_objnum != -1))) {
 								// std & auto convergence
 								vec3d target_vec, firing_vec, convergence_offset;
-								
+								if (multi_ship_record_get_rollback_wep_mode()) {
+									mprintf(("i8\n"));
+								}
+
 								// make sure vector is of the set length
 								vm_vec_copy_normalize(&target_vec, &player_forward_vec);
 								if ((sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence]) && (aip->target_objnum != -1)) {
@@ -11291,6 +11410,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 								vm_vec_add2(&target_vec, &obj->pos);
 								vm_vec_sub(&firing_vec, &target_vec, &firing_pos);
+								if (multi_ship_record_get_rollback_wep_mode()) {
+									mprintf(("ii8\n"));
+								}
 
 								// set orientation
 								vm_vector_2_matrix(&firing_orient, &firing_vec, NULL, NULL);
@@ -11314,6 +11436,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 								vm_vec_scale(&local_impulse, (-1 * recoil_force));
 								vm_vec_add2(&total_impulse, &local_impulse);
 							}
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iii8\n"));
+							}
 
 							// create the weapon -- the network signature for multiplayer is created inside
 							// of weapon_create							
@@ -11327,10 +11452,8 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 								}
 								continue;
 							}
-
-							// maybe add this weapon to the list of those we need to roll forward
-							if (Game_mode & GM_MULTIPLAYER && multi_ship_record_get_rollback_wep_mode()) {
-								multi_ship_record_add_rollback_wep(weapon_objnum);
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iiii8\n"));
 							}
 
 							winfo_p = &Weapon_info[Weapons[Objects[weapon_objnum].instance].weapon_info_index];
@@ -11338,6 +11461,9 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 
 
 							weapon_set_tracking_info(weapon_objnum, OBJ_INDEX(obj), aip->target_objnum, aip->current_target_is_locked, aip->targeted_subsys);				
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iiiii8\n"));
+							}
 
 							if (winfo_p->wi_flags[Weapon::Info_Flags::Flak])
 							{
@@ -11379,6 +11505,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 								// show the flash only if in not cockpit view, or if "show ship" flag is set
 								shipfx_flash_create( obj, sip->model_num, &pnt, &obj->orient.vec.fvec, 1, weapon_idx );
 							}
+							if (multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("iiiii8\n"));
+							}
+
 
 							// maybe shudder the ship - if its me
 							if((winfo_p->wi_flags[Weapon::Info_Flags::Shudder]) && (obj == Player_obj) && !(Game_mode & GM_STANDALONE_SERVER)){
@@ -11388,8 +11518,14 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 							}
 
 							num_fired++;
-							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;
-//							multi_ship_record_maybe_track_weapon(weapon_objnum);					
+							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;				
+
+							// maybe add this weapon to the list of those we need to roll forward
+							if ((Game_mode & GM_MULTIPLAYER) && multi_ship_record_get_rollback_wep_mode()) {
+								mprintf(("goal\n\n"));
+								multi_ship_record_add_rollback_wep(weapon_objnum);
+
+							}
 						}
 					}
 					swp->external_model_fp_counter[bank_to_fire]++;
@@ -11471,10 +11607,10 @@ int ship_fire_primary(object * obj, int stream_weapons, int force)
 	if(Game_mode & GM_MULTIPLAYER){
 		// if I'm a Host send a primary fired packet packet if it's brand new
 		if(MULTIPLAYER_MASTER && !multi_ship_record_get_rollback_wep_mode()) {
-		send_NEW_primary_fired_packet(shipp, banks_fired);
+		send_non_homing_fired_packet(shipp, banks_fired);
 		// or if I'm a client, and it is my ship send it for rollback on the server.
 		} else if (MULTIPLAYER_CLIENT && (shipp == Player_ship)) {
-				send_NEW_primary_fired_packet(shipp, banks_fired);
+				send_non_homing_fired_packet(shipp, banks_fired);
 		}
 		 
 	}
@@ -11759,7 +11895,6 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 	swp = &shipp->weapons;
 	sip = &Ship_info[shipp->ship_info_index];
 	aip = &Ai_info[shipp->ai_index];
-
 	// if no secondary weapons are present on ship, return
 	if ( swp->num_secondary_banks <= 0 ){
 		return 0;
@@ -11903,7 +12038,6 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 	}
 
 
-
 	// if trying to fire a swarm missile, make sure being called from right place
 	if ( (wip->wi_flags[Weapon::Info_Flags::Swarm]) && !allow_swarm ) {
 		Assert(wip->swarm_count > 0);
@@ -11951,6 +12085,7 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 			goto done_secondary;
 		}
 	}
+
 
 	pm = model_get( sip->model_num );
 	if ( pm->n_missiles > 0 ) {
@@ -12104,6 +12239,12 @@ int ship_fire_secondary( object *obj, int allow_swarm )
 				swp->detonate_weapon_time = timestamp(500);		//	Can detonate 1/2 second later.
 				swp->last_fired_weapon_signature = Objects[weapon_num].signature;
 
+				// possibly add this to the rollback vector
+				if ((Game_mode & GM_MULTIPLAYER) && multi_ship_record_get_rollback_wep_mode()){
+					mprintf(("secondaries returning as true!!\n"));
+					multi_ship_record_add_rollback_wep(weapon_num);
+				}
+
 				// subtract the number of missiles fired
 				if ( Weapon_energy_cheat == 0 ){
 					swp->secondary_bank_ammo[bank]--;
@@ -12136,14 +12277,14 @@ done_secondary:
 
 	if(num_fired > 0){
 		// if I am the master of a multiplayer game, send a secondary fired packet along with the
-		// first network signatures for the newly created weapons.  if nothing got fired, send a failed
-		// packet if 
+		// first network signatures for the newly created weapons.
+		// Cyborg17 - If this is a rollback shot, the server will let the player know within the packet.
 		if ( MULTIPLAYER_MASTER ) {			
 			Assert(starting_sig != 0);
 			send_secondary_fired_packet( shipp, starting_sig, starting_bank_count, num_fired, allow_swarm );			
 		}
 
-		// STATS
+		// STATS -- And client side dumbfire secondary firing.
 		if (obj->flags[Object::Object_Flags::Player_ship]) {
 			// in multiplayer -- only the server needs to keep track of the stats.  Call the cool
 			// function to find the player given the object *.  It had better return a valid player
@@ -12156,7 +12297,10 @@ done_secondary:
 					Assert ( player_num != -1 );
 
 					Net_players[player_num].m_player->stats.ms_shots_fired += num_fired;
-				}				
+				} else if (MULTIPLAYER_CLIENT) {
+					if (!wip->is_homing())
+					send_non_homing_fired_packet(shipp, num_fired, true);
+				}
 			} else {
 				Player->stats.ms_shots_fired += num_fired;
 			}
