@@ -804,6 +804,8 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 		Weapons[wobjp->instance].lifeleft -= time_elapsed;
 
 	}
+	
+	// obj_collide_pair(object a, object b)
 
 	// If we do in between frame collision detection, we'll need to do this calculation frame by frame.  This restoration should probably be its own functions at some point.
 	for (auto restore_point : Oo_info.rollback_ships) {
