@@ -1591,8 +1591,8 @@ void obj_move_all(float frametime)
 	// do post-collision stuff for beam weapons
 	beam_move_all_post();
 
-	// Cyborg17 - Update the server record on multi with these new positions.
-	if (MULTIPLAYER_MASTER) {
+	// Cyborg17 - Update the multi record on multi with these new positions. Clients need to get updated, too.
+	if (Game_mode & GM_MULTIPLAYER) {
 		multi_ship_record_update_all();
 	}
 
