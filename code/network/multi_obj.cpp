@@ -711,8 +711,6 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 	int net_sig_idx;
 	object* objp;
 
-
-
 	// roll all the ships back
 	for (ship & cur_ship : Ships) {
 
@@ -810,14 +808,14 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 	// If we do in between frame collision detection, we'll need to do this calculation frame by frame.  This restoration should probably be its own functions at some point.
 	for (auto restore_point : Oo_info.rollback_ships) {
 
-		net_sig_idx = restore_point.objp->net_signature;
+		objp = restore_point.objp;
 		mprintf(("Post-rollback network sig is...%d\n", net_sig_idx));
 
 		int cur_frame = Oo_info.cur_frame_index;
 
-		restore_point.objp->pos = Oo_info.frame_info[net_sig_idx].positions[cur_frame];
-		restore_point.objp->orient = Oo_info.frame_info[net_sig_idx].orientations[cur_frame];
-		restore_point.objp->phys_info.vel = Oo_info.frame_info[net_sig_idx].velocities[cur_frame];
+		objp->pos = restore_point.position;
+		objp->orient = restore_point.orientation;
+		objp->phys_info.vel = restore_point.velocity;
 
 		mprintf(("Post-rollback position is...%f %f %f\n", restore_point.objp->pos.xyz.x, restore_point.objp->pos.xyz.y, restore_point.objp->pos.xyz.z));
 
