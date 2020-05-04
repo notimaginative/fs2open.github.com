@@ -22,6 +22,7 @@
 #include "network/multi_rate.h"
 #include "network/multi.h"
 #include "object/object.h"
+#include "object/objcollide.h"		// for multi rollback collisions
 #include "object/objectshield.h"
 #include "ship/ship.h"
 #include "playerman/player.h"
@@ -131,6 +132,10 @@ struct oo_rollback_restore_record {
 	vec3d velocity;
 };
 
+struct oo_unsimulated_fire_points {
+
+};
+
 // our struct for keeping track of all interpolation and oo packet info.
 struct oo_general_info{
 
@@ -164,6 +169,8 @@ struct oo_general_info{
 	bool rollback_mode;										// are we currently creating and moving weapons from the client primary fire packets
 	SCP_vector<oo_rollback_restore_record> rollback_ships;	// a list of ships that are currently getting rolled back, does NOT use net_sig or player as an index 
 	SCP_vector<object*> rollback_wobjp;						// a list of the weapons that were created, so that we can roll them into the current simulation
+	SCP_vector<oo_unsimulated_fire_points> new_fire_points; // a list of shots that we are going to simulate
+	int rollback_cur_frame;									// the frame that 
 
 };
 
@@ -673,11 +680,22 @@ void multi_ship_record_add_rollback_wep(int wep_objnum) {
 	Oo_info.rollback_wobjp.push_back(wobjp);
 }
 
-// for now we create and push forward.  Later we will create, store, roll the whole frame forward and check for collisions.
-void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id) {
+// This stores the information we got from the client to create later.
+void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id) {
+	mprintf(("I'm the last one to run! 17\n"));
+
+
+
+
+
+
+}
+
+void multi_ship_record_do_rollback(){
 	mprintf(("I'm the last one to run! 17\n"));
 	int net_sig_idx;
 	object* objp;
+	SCP_vector<int>rollback_collide_list;
 
 	// roll all the ships back
 	for (ship & cur_ship : Ships) {
@@ -721,9 +739,16 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 			objp->phys_info.vel = Oo_info.frame_info[net_sig_idx].velocities[frame];
 		}
 
+		rollback_collide_list.push_back(OBJ_INDEX(objp));
+
 		mprintf(("During-rollback position is...%f %f %f\n", objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z));
 
 	}
+
+// at some point I should make it a better loop, like this one.
+//	for (auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
+	
+//	}
 
 	mprintf(("Old position: %f %f %f\n", pobjp->pos.xyz.x, pobjp->pos.xyz.y, pobjp->pos.xyz.z));
 
@@ -771,15 +796,30 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 		mprintf(("Final position of rollback weapon is %f %f %f\n", wobjp->pos.xyz.x, wobjp->pos.xyz.y, wobjp->pos.xyz.z));
 		Weapons[wobjp->instance].lifeleft -= time_elapsed;
 
+		rollback_collide_list.push_back(OBJ_INDEX(wobjp));
+
 	}
 	
-	// obj_collide_pair(object a, object b)
+	if (Oo_info.rollback_cur_frame < frame) {
+	
+	}
+		Oo_info.rollback_cur_frame = frame;
+
+
+	obj_sort_and_collide(rollback_collide_list);
+
+
+	multi_record_restore_positions();
+
+}
+
+// restores ships to the positions they were in bedfore rollback.
+void multi_record_restore_positions() {
 
 	// If we do in between frame collision detection, we'll need to do this calculation frame by frame.  This restoration should probably be its own functions at some point.
 	for (auto restore_point : Oo_info.rollback_ships) {
 
-		objp = restore_point.objp;
-		mprintf(("Post-rollback network sig is...%d\n", net_sig_idx));
+		object* objp = restore_point.objp;
 
 		int cur_frame = Oo_info.cur_frame_index;
 

@@ -7753,7 +7753,7 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
 
-			multi_ship_record_fire_rollback_shots(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary, hinfo->id);
+			multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary, hinfo->id);
 
 		} else {
 		// if the new way fails for some reason, use the old way.
