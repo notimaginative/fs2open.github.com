@@ -7723,18 +7723,8 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
 
-			// maybe interpolation isn't necessary
-			if (time_after_frame <= 0) {
-				// so just lookup where the ship used to be
-				new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
-				mprintf(("No interpolation.\n"));
-			} // but usually we'll have to interpolate to get an accurate shot. 
-			else {
-				mprintf(("Interpolation used.\n"));
-				multi_ship_record_interp_between_frames(&new_tar_pos, &new_tar_ori, net_sig_idx, frame, time_after_frame);
-			}
-			// TEMPORARY, let's just interpolate position for now so that we know that that works.  Then we can interpolate rotation separately later.
-//			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
+			new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
+			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
 
 			// find out where the angle to the new primary fire should be, by
 			// rotating the vector

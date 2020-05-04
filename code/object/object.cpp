@@ -1592,7 +1592,7 @@ void obj_move_all(float frametime)
 	beam_move_all_post();
 
 	// Cyborg17 - Update the multi record on multi with these new positions. Clients need to get updated, too.
-	if (Game_mode & GM_MULTIPLAYER) {
+	if (MULTIPLAYER_MASTER) {
 		multi_ship_record_update_all();
 	}
 
