@@ -7508,8 +7508,8 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	vec3d temp_vec, ref_to_ship_vec;
 
 	// Cyborg17 - and corresponding pointers
-	vec3d ship_pos, * ref_pos;
-	matrix ship_ori, * ref_ori;
+	vec3d ship_pos, ref_pos;
+	matrix ship_ori, ref_ori;
 
 	// get an object pointer for this ship.
 	objnum = shipp->objnum;
@@ -7539,28 +7539,29 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 			flags |= NON_HOMING_PACKET_MISSILE;
 		}
 
-		ref_pos = &temp_objp->pos;
-		ref_ori = &temp_objp->orient;
+		ref_pos = temp_objp->pos;
+		ref_ori = temp_objp->orient;
 		ref_obj_netsig = temp_objp->net_signature;
 
 		ship_pos = objp->pos;
 		ship_ori = objp->orient;
 
 		// Find the vector between the two objects
-		vm_vec_sub(&ref_to_ship_vec, &ship_pos, ref_pos);
+		vm_vec_sub(&ref_to_ship_vec, &ship_pos, &ref_pos);
 
 		temp_vec = ref_to_ship_vec;
 			
 		// Normalize and unrotate via transposed matrix
 		// Save the transposed matrix so that we can optimize and use it twice.
-		vm_transpose(ref_ori);
+		vm_transpose(&ref_ori);
 		
 		// This is an "unrotate", because the matrix has already been transposed.  
 		// This finalized the relative position we will send to the server. 
-		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, ref_ori);
+		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &ref_ori);
 
 		// Save on bandwidth by changing to angles.
-		vm_extract_angles_matrix_alternate(&adjustment_angles, ref_ori);
+		vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
+		vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
 		vm_extract_angles_matrix_alternate(&player_ship_angles, &ship_ori);
 
 
