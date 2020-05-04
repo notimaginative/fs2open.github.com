@@ -303,7 +303,6 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 // Add a new ship to the tracking struct once it's valid in a mission.
 void multi_ship_record_add_ship(int obj_num)
 {
-	mprintf(("I'm the last one to run! 1\n"));
 	object* objp = &Objects[obj_num];
 	int net_sig_idx = objp->net_signature;
 
@@ -376,14 +375,11 @@ void multi_ship_record_update_all()
 	int net_sig_idx;
 	object* objp;
 
-	mprintf(("Annoying update checking "));
-
 		for (ship & cur_ship : Ships) {
 		
 		if (cur_ship.objnum == -1) {
 			break;
-		}
-		
+		}		
 		
 		objp = &Objects[cur_ship.objnum];
 
@@ -391,8 +387,6 @@ void multi_ship_record_update_all()
 			continue;
 		}
 		 
-
-
 		net_sig_idx = objp->net_signature;
 
 		// make sure it's a valid index.
@@ -406,18 +400,14 @@ void multi_ship_record_update_all()
 				Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = Oo_info.frame_info[net_sig_idx].positions[Oo_info.frame_info[net_sig_idx].death_or_depart_frame];
 				Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = Oo_info.frame_info[net_sig_idx].orientations[Oo_info.frame_info[net_sig_idx].death_or_depart_frame];
 				Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index] = Oo_info.frame_info[net_sig_idx].velocities[Oo_info.frame_info[net_sig_idx].death_or_depart_frame];
-				mprintf(("net_sig %d pos %f %f %f velocity %f %f %f \n", net_sig_idx, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.x, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.y, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.z,
-					Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.x, Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.y, Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.z));
 
 		}	// Update the position and orientation here in order to record the movement
 		else {
 			Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
 			Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
 			Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index] = objp->phys_info.vel;
-			mprintf(("net_sig %d pos %f %f %f velocity %f %f %f \n", net_sig_idx, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.x, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.y, Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index].xyz.z,
-				Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.x, Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.y, Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index].xyz.z));
 
-
+			// if they are dying, mark them as dead.
 			if (cur_ship.is_dying_or_departing()) {
 				Oo_info.frame_info[net_sig_idx].death_or_depart_frame = Oo_info.number_of_frames;
 			}
@@ -428,7 +418,6 @@ void multi_ship_record_update_all()
 // Increment the tracker per frame, before packets are processed
 void multi_ship_record_increment_frame() 
 {
-//	mprintf(("I'm the last one to run! 4\n"));
 	Oo_info.number_of_frames++;
 	Oo_info.cur_frame_index++;
 
@@ -458,57 +447,43 @@ int multi_find_prev_frame_idx() {
 
 // Calculates the current wrap from a packet sequence number or from an otherwise combined frame.
 ubyte multi_ship_record_calculate_wrap(ushort combined_frame) 
-{	mprintf(("I'm the last one to run! 6\n"));
+{	
 	return combined_frame  / MAX_FRAMES_RECORDED;
 }
 
 // Finds the first frame that is before the incoming timestamp.
 int multi_ship_record_find_frame(ushort client_frame, ubyte wrap, int time_elapsed)
 {
-	mprintf(("I'm the last one to run! 7\n"));
-
 	// unpack the wrap and frame from the client packet
 	int frame = client_frame % MAX_FRAMES_RECORDED;
 	bool same_wrap = false;
 	// get how many frames we would go into the future.
 	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
-	mprintf(("target_timestamp came to %d \n", target_timestamp));
 
 	// easy case, client is reasonably up to date, so just return the frame.
 	if (wrap == Oo_info.wrap_count) {
-		mprintf(("Branch 1 \n"));
-
 		same_wrap = true;
 
 	}	// somewhat out of date but still salvagable case.
 	else if (wrap == (Oo_info.wrap_count - 1)) {
-		mprintf(("Branch 2 \n"));
 		// but we can't use it if it would index to info in the current wrap instead of the previous wrap.
 		if (frame >= Oo_info.cur_frame_index) {
-			mprintf(("Branch 3 \n"));
-//			mprintf(("Client requested frame from wrong wrap.\n"));
 			return -1;
 		}
 
 		// Just in case the larger wrap just happened....
 	} else if (wrap == MAX_SERVER_TRACKER_SMALL_WRAPS && Oo_info.wrap_count == 0){
-		mprintf(("Branch 4 \n"));
 		if (frame >= Oo_info.cur_frame_index) {
-			mprintf(("Branch 5 \n"));
-//			mprintf(("Client requested frame from wrong wrap.\n"));
 			return -1;
 		}
 
 		// request is way too old.
 	} else {
-		mprintf(("Branch 6 \n"));
-//		mprintf(("Client requested frame from wrong wrap.\n"));
 		return -1;
 	}
 
 	// Now that the wrap has been verified, if time_elapsed is zero return the frame it gave us.
 	if(time_elapsed == 0){
-		mprintf(("Branch 7 \n"));
 		return frame;
 	}
 
@@ -517,36 +492,29 @@ int multi_ship_record_find_frame(ushort client_frame, ubyte wrap, int time_elaps
 
 		// Check to see if the client's timestamp matches the recorded frames.
 		if ((Oo_info.timestamps[i] <= target_timestamp) && (Oo_info.timestamps[i + 1] > target_timestamp)) {
-			mprintf(("Branch 9 at i = %d \n", i));
 			return i;
 		}
 		else if (i == frame) {
-			mprintf(("Branch 10 at i %d \n", i));
 			return -1;
 		}
 	}
 
 	// Check for the wrap.
 	if ((Oo_info.timestamps[MAX_FRAMES_RECORDED - 1] <= target_timestamp) && (Oo_info.timestamps[0] > target_timestamp)) {
-		mprintf(("Branch 11 \n"));
 		return MAX_FRAMES_RECORDED - 1;
 	}
 
 	// Check the oldest frames.
 	for (int i = MAX_FRAMES_RECORDED - 2; i > Oo_info.cur_frame_index; i--) {
 		if ((Oo_info.timestamps[i] <= target_timestamp) && (Oo_info.timestamps[i + 1] > target_timestamp)) {
-			mprintf(("Branch 12 at i = %d \n", i));
 			return i;
 		}
 		else if (i == frame) {
-			mprintf(("Branch 13 \n"));
 			return -1;
 		}
 	}
 
 	// this is if again the request is way too delayed to be valid, but somehow wasn't caught earlier.
-//	mprintf(("g) Timestamp given to frame tracker is invalid. And in a section that should be logically dead\n"));
-	mprintf(("Branch 14 \n"));
 	return -1;
 }
 
@@ -620,7 +588,7 @@ int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame
 	return return_value;
 }
 
-// find the exact point on the server that the client sees by interpolating (linearly)
+/* find the exact point on the server that the client sees by interpolating (linearly)
 void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_ori, int net_sig_idx, ushort original_frame, int time_elapsed) {
 	mprintf(("I'm the last one to run! 13\n"));
 
@@ -679,7 +647,7 @@ void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_o
 
 	vm_angles_2_matrix(interp_ori, &angles_final);
 	vm_orthogonalize_matrix(interp_ori);
-}
+}*/
 
 void multi_ship_record_set_rollback_wep_mode(bool enable) {
 	mprintf(("I'm the last one to run! 14\n"));
@@ -825,6 +793,7 @@ void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* or
 
 	Oo_info.rollback_wobjp.clear();
 	Oo_info.rollback_ships.clear();
+
 
 }
 
