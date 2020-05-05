@@ -38,7 +38,7 @@ struct weapon;
 // NOTE: no additional flags here unless it's sent in an extra data byte
 
 // Cyborg17, Server will be tracking only the last second of frames
-#define MAX_FRAMES_RECORDED		120
+#define MAX_FRAMES_RECORDED		30
 #define PRIMARY_PACKET_CUTOFF			2000
 
 // ---------------------------------------------------------------------------------------------------
@@ -74,17 +74,12 @@ vec3d multi_ship_record_lookup_position(object* objp, int frame);
 matrix multi_ship_record_lookup_orientation(object* objp, int frame);
 
 // quickly lookup how much time has passed since the given frame.
-uint multi_ship_record_get_time_elapsed(ushort original_frame);
+uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 
 int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
-// find the exact point on the server that the client sees by interpolating 
-void multi_ship_record_interp_between_frames(vec3d *interp_pos, matrix *interp_ori, int net_sig_idx, ushort original_frame, int time_elapsed);
-
-// ULTIMATE TODO, write new function that manages collision detection for inbetween frames.
-
 // Creates a weapon and adds it to the Frame Records so that we can  
-void multi_ship_record_fire_rollback_shots(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id);
+void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id);
 
 // Set multi to rollback mode.
 void multi_ship_record_set_rollback_wep_mode(bool enable);
