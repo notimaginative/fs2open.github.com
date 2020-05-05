@@ -57,6 +57,7 @@ struct obj_pair	{
 	struct obj_pair *next;
 };
 
+extern SCP_vector<int> Collision_sort_list;
 
 #define COLLISION_OF(a,b) (((a)<<8)|(b))
 
