@@ -79,13 +79,24 @@ uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
 // Creates a weapon and adds it to the Frame Records so that we can  
-void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id);
+void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary);
 
-// Set multi to rollback mode.
-void multi_ship_record_set_rollback_wep_mode(bool enable);
+// This stores the information we got from the client to create later, and checks to see if this is the oldest shot we are going to fire during rollback.
+void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary);
 
 // Lookup whether rollback mode is on
 bool multi_ship_record_get_rollback_wep_mode();
+// Manage rollback for a frame
+void multi_ship_record_do_rollback();
+
+// fire the rollback weapons that are in the rollback struct
+void multi_oo_fire_rollback_shots(int frame_idx);
+
+// moves all rollbacked ships back to the original frame
+void multi_oo_restore_frame(int frame_idx);
+
+// pushes the rollback weapons forward for a single rollback frame.
+void multi_oo_simulate_rollback_shots(int frame_idx);
 
 // Adds a weapon to the rollback tracker.
 void multi_ship_record_add_rollback_wep(int wep_objnum);

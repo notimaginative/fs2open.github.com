@@ -1023,7 +1023,7 @@ void obj_find_overlap_colliders(SCP_vector<int> &overlap_list_out, SCP_vector<in
 static SCP_vector<int> sort_list_y;
 static SCP_vector<int> sort_list_z;
 
-void obj_sort_and_collide(SCP_vector<int> Collision_list = Collision_sort_list)
+void obj_sort_and_collide(SCP_vector<int> Collision_list)
 {
 	if (Cmdline_dis_collisions)
 		return;

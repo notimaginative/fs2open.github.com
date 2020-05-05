@@ -574,7 +574,6 @@ vec3d multi_ship_record_lookup_position(object* objp, int frame) {
 
 // Quick lookup for the record of orientation.
 matrix multi_ship_record_lookup_orientation(object* objp, int frame) {
-	mprintf(("I'm the last one to run! 10\n"));
 	return Oo_info.frame_info[objp->net_signature].orientations[frame];
 }
 
@@ -601,67 +600,6 @@ int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame
 	//	mprintf(("Adjust timestamp's value is: %d",return_value));
 	return return_value;
 }
-
-/* find the exact point on the server that the client sees by interpolating (linearly)
-void multi_ship_record_interp_between_frames(vec3d* interp_pos, matrix* interp_ori, int net_sig_idx, ushort original_frame, int time_elapsed) {
-	mprintf(("I'm the last one to run! 13\n"));
-
-	float timestamp_difference;
-	float scale_factor;
-	int next_frame;
-
-	// figure out what the other frame index would be.
-	if (original_frame == MAX_FRAMES_RECORDED - 1) {
-		next_frame = 0;
-	}
-	else {
-		next_frame = original_frame + 1;
-	}
-
-	// find how much time was there between frames
-	timestamp_difference = float(Oo_info.timestamps[next_frame] - Oo_info.timestamps[original_frame]);
-	Assertion(timestamp_difference >= 0.0f, "While interpolating, timestamp difference was invalid value: %f", timestamp_difference);
-
-	mprintf(("timestamp difference is %f \n", timestamp_difference));
-
-	if (timestamp_difference < 0.0f) {
-		return;
-	}
-	// figure out how far between the points we would be
-	scale_factor = (float)time_elapsed / timestamp_difference;
-
-	vec3d pos_a, pos_b, temp_vec;
-
-	// retreive the points
-	mprintf(("original frame is %d , next frame is %d \n", original_frame, next_frame));
-	pos_a = Oo_info.frame_info[net_sig_idx].positions[original_frame];
-	mprintf(("pos_a is %f %f %f\n", pos_a.xyz.x, pos_a.xyz.y, pos_a.xyz.z));
-	pos_b = Oo_info.frame_info[net_sig_idx].positions[next_frame];
-	mprintf(("pos_b is %f %f %f\n", pos_b.xyz.x, pos_b.xyz.y, pos_b.xyz.z));
-
-	// and calculate
-	vm_vec_sub(&temp_vec, &pos_b, &pos_a);
-	mprintf(("temp_vec is %f %f %f\n", temp_vec.xyz.x, temp_vec.xyz.y, temp_vec.xyz.z));
-	vm_vec_scale(&temp_vec, scale_factor);
-	mprintf(("temp_vec after scaling is %f %f %f\n", temp_vec.xyz.x, temp_vec.xyz.y, temp_vec.xyz.z));
-
-	vm_vec_add(interp_pos, &temp_vec, &pos_a);
-	mprintf(("interp_pos is %f %f %f\n", interp_pos->xyz.x, interp_pos->xyz.y, interp_pos->xyz.z));
-	
-
-
-	angles angles_a, angles_b, angles_final;
-
-	// get the angles
-	vm_extract_angles_matrix_alternate(&angles_a, &Oo_info.frame_info[net_sig_idx].orientations[original_frame]);
-	vm_extract_angles_matrix_alternate(&angles_b, &Oo_info.frame_info[net_sig_idx].orientations[next_frame]);
-
-	// and calculate
-	vm_interpolate_angles_quick(&angles_final, &angles_a, &angles_b, scale_factor);
-
-	vm_angles_2_matrix(interp_ori, &angles_final);
-	vm_orthogonalize_matrix(interp_ori);
-}*/
 
 void multi_ship_record_set_rollback_wep_mode(bool enable) {
 	mprintf(("I'm the last one to run! 14\n"));
@@ -701,6 +639,7 @@ void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orie
 
 }
 
+// Manage rollback for a frame
 void multi_ship_record_do_rollback() {
 	mprintf(("I'm the last one to run! 17\n"));
 
@@ -752,10 +691,10 @@ void multi_ship_record_do_rollback() {
 		Oo_info.rollback_collide_list.push_back(OBJ_INDEX(objp));
 	}
 
-// at some point I should make it a better loop, like this one.
-//	for (auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
+	// at some point I should make it a better loop, like this one.
+	//	for (auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
 
-//	}
+	//	}
 
 	int frame_idx = Oo_info.cur_frame_index + 1;
 	if (frame_idx == MAX_FRAMES_RECORDED) {
@@ -795,11 +734,22 @@ void multi_ship_record_do_rollback() {
 		}
 
 	}
-	
+
 	// restore the old frame
 	multi_record_restore_positions();
+
+	Oo_info.rollback_collide_list.clear();
+	Oo_info.rollback_cur_frame = MAX_FRAMES_RECORDED;
+	Oo_info.rollback_mode = false;
+	Oo_info.rollback_ships.clear();
+	for (int i = 0; i < MAX_FRAMES_RECORDED; i++){ 
+		Oo_info.rollback_shots[i].clear();
+	}
+	
+	Oo_info.rollback_wobjp.clear();
 }
 
+// fires the rollback weapons that are in the rollback struct
 void multi_oo_fire_rollback_shots(int frame_idx){
 
 	int old_size = (int)Oo_info.rollback_wobjp.size();
@@ -828,6 +778,7 @@ void multi_oo_fire_rollback_shots(int frame_idx){
 	}
 }
 
+// moves all rollbacked ships back to the original frame
 void multi_oo_restore_frame(int frame_idx){
 
 	for (auto& objp : Oo_info.rollback_ships) {
@@ -839,6 +790,7 @@ void multi_oo_restore_frame(int frame_idx){
 	}
 }
 
+// pushes the rollback weapons forward for a single rollback frame.
 void multi_oo_simulate_rollback_shots(int frame_idx) {
 	
 	int prev_frame = frame_idx - 1;
