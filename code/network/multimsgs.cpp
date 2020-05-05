@@ -7585,7 +7585,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	ADD_USHORT(objp->net_signature);
 	ADD_DATA(flags);
 
-	mprintf(("\n\n\nI am death bringer of dumbfires. %d ", flags));
 	if (MULTIPLAYER_CLIENT) {
 		ADD_USHORT(ref_obj_netsig);
 		ADD_USHORT(last_received_frame);
@@ -7597,7 +7596,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 		ADD_FLOAT(player_ship_angles.b);
 		ADD_FLOAT(player_ship_angles.h);
 		ADD_FLOAT(player_ship_angles.p);
-		mprintf(("%d \n\n", time_elapsed));
 
 	}
 	
@@ -7610,7 +7608,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	}
 	// otherwise just send to the server
 	else {
-		mprintf(("dumbfire magic!\n"));
 		multi_io_send(Net_player, data, packet_size);		
 	}
 }
