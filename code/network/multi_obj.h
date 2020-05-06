@@ -86,6 +86,10 @@ void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orie
 
 // Lookup whether rollback mode is on
 bool multi_ship_record_get_rollback_wep_mode();
+
+// Adds a weapon to the rollback tracker.
+void multi_ship_record_add_rollback_wep(int wep_objnum);
+
 // Manage rollback for a frame
 void multi_ship_record_do_rollback();
 
@@ -98,8 +102,10 @@ void multi_oo_restore_frame(int frame_idx);
 // pushes the rollback weapons forward for a single rollback frame.
 void multi_oo_simulate_rollback_shots(int frame_idx);
 
-// Adds a weapon to the rollback tracker.
-void multi_ship_record_add_rollback_wep(int wep_objnum);
+// restores ships to the positions they were in bedfore rollback.
+void multi_record_restore_positions();
+
+
 
 // ---------------------------------------------------------------------------------------------------
 // Client side frame tracking, for now used only to help lookup info from packets to improve client accuracy.

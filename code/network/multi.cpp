@@ -1249,6 +1249,10 @@ void multi_do_frame()
 				Next_bytes_time = (int) time(NULL);				
 			}
 		} else {
+
+			// right before sending new positions, we should do any rollback frame detection
+			multi_ship_record_do_rollback();
+
 			// sending new objects from here is dependent on having objects only created after
 			// the game is done moving the objects.  I think that I can enforce this.				
 			multi_oo_process();			
