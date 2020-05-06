@@ -3055,6 +3055,7 @@ void send_secondary_fired_packet( ship *shipp, ushort starting_sig, int  /*start
 /// process a packet indicating a secondary weapon was fired
 void process_secondary_fired_packet(ubyte* data, header* hinfo, int from_player)
 {
+	mprintf(("we got a secondary fired packet.\n"));
 	int offset, allow_swarm, target_objnum_save;
 	ushort net_signature, starting_sig, target_net_signature;
 	ubyte sinfo, current_bank;
@@ -7688,9 +7689,12 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		objp_ref = multi_get_network_object(target_ref);
 
 		if (objp_ref == nullptr) {
+			mprintf(("packet failed beecause of nullptr\n"))
 			// new way failed, use the old new way.
 			if (secondary) {
-				ship_fire_secondary(objp);
+				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
+				// rollback shot so the client doesn't get an extra shot.
+				ship_fire_secondary(objp, 0, true);
 			} else { 
 				ship_fire_primary(objp, 0, 1);
 			}
@@ -7704,19 +7708,16 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		// figure out correct start frame and adjust the time elapsed
 		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
 		
-		if (frame != -1) {
+		if (frame > -1) {
 			// make sure that record we would access is from this ship!
 		//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
 		//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
 		//		return;
 		//	}	
-			mprintf(("Valid frame.\n"));
 			int net_sig_idx = objp_ref->net_signature;
 
 			// adjust time so that we can interpolate the position and orientation that was seen on the client.
 			time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
-
-			mprintf(("Server determined time_after_frame: %d\n", time_after_frame));
 
 			Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
 
@@ -7733,9 +7734,6 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			// Finish finding the shot's starting position	
 			vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
-
-
-			mprintf(("adjustment angles need to fixed. %f %f %f\n", adjustment_angles.h, adjustment_angles.p, adjustment_angles.b));
 
 			// "decompress" the orientation matrix from the packet's angles.
 					vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
@@ -7756,7 +7754,9 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		// if the new way fails for some reason, use the old way.
 			mprintf(("New primary shot system failed because frame was -1.\n"));
 			if (secondary) {
-				ship_fire_secondary(objp);
+				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
+				// rollback shot so the client doesn't get an extra shot.
+				ship_fire_secondary(objp, 0, true);
 			} else { 
 				ship_fire_primary(objp, 0, 1);
 			}		
