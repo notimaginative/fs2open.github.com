@@ -7689,7 +7689,7 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		objp_ref = multi_get_network_object(target_ref);
 
 		if (objp_ref == nullptr) {
-			mprintf(("packet failed beecause of nullptr\n"))
+			mprintf(("packet failed beecause of nullptr\n"));
 			// new way failed, use the old new way.
 			if (secondary) {
 				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
