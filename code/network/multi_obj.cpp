@@ -131,7 +131,7 @@ struct oo_rollback_restore_record {
 	vec3d velocity;
 };
 //object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary, short player_id
-struct oo_unsimulated_fire_points {
+struct oo_unsimulated_shots {
 	object* shooterp;		// pointer to the shooting object
 	vec3d pos;				// the position from the packet.
 	matrix orient;			// the orientation from the packet.
@@ -141,7 +141,7 @@ struct oo_unsimulated_fire_points {
 // our struct for keeping track of all interpolation and oo packet info.
 struct oo_general_info{
 
-	// info that helps us figure out what is the best reference object available.
+	// info that helps us figure out what is the best reference object available when sending a rollback shot.
 	// We go by what is the most recent packet received, and then by distance.
 	int ref_timestamp;
 	int ref_pos_frametime;
@@ -165,6 +165,7 @@ struct oo_general_info{
 	SCP_vector<oo_netplayer_records> player_frame_info;		// keeps track of player targets and what has been sent to each player. Uses player as the index
 
 	// Tracking Received info and interpolation timing per ship 
+	bool last_received_odd_wrap;							// keeps track if the serveri
 	SCP_vector<oo_packet_and_interp_tracking> interp;		// uses net_signature as its index.
 
 	// rollback info
@@ -172,7 +173,7 @@ struct oo_general_info{
 	SCP_vector<object*> rollback_wobjp;						// a list of the weapons that were created, so that we can roll them into the current simulation
 	SCP_vector<object*> rollback_ships;						// a list of ships that take part in roll back,
 	SCP_vector<oo_rollback_restore_record> restore_points;	//  does NOT use net_sig or player as an index 
-	SCP_vector<oo_unsimulated_fire_points> 
+	SCP_vector<oo_unsimulated_shots> 
 		rollback_shots[MAX_FRAMES_RECORDED];				// the shots we will need to fire and simulate during rollback, organized into the frames they will be fired
 	int rollback_cur_frame;									// the frame that we are currently simulating
 	SCP_vector<int>rollback_collide_list;					// the list of ships and weapons that we need to check collisions for during rollback.
@@ -620,7 +621,7 @@ void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orie
 
 	Oo_info.rollback_mode = true;
 
-	oo_unsimulated_fire_points new_shot;
+	oo_unsimulated_shots new_shot;
 	new_shot.shooterp = pobjp;
 	new_shot.pos = *pos;
 	new_shot.orient = *orient;
@@ -878,6 +879,7 @@ int multi_client_lookup_current_frametime() {
 	return Oo_info.ref_pos_frametime;
 }
 
+// TODO: to go along with this, we should probably update change ship so that interpolation info can be reset 
 void multi_oo_respawn_reset_info(ushort net_sig) {
 	mprintf(("I'm the last one to run! 24\n"));
 	Assertion(net_sig != 0, "Multi_reset_oo_info got passed an invalid value. This is a coder error, please report.");
@@ -885,7 +887,7 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 		return;
 	}
 
-	// clean up all the info that could mess things up in the future.
+	// When a player respawns, they keep their net signature, so clean up all the info that could mess things up in the future.
 
 	Oo_info.frame_info[net_sig].death_or_depart_frame = -1;
 
@@ -904,28 +906,44 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 	if (Oo_info.most_recent_updated_net_signature == net_sig) {
 		// TODO: write clean way to keep this ship from being the current reference ship.
 	}
-		Oo_info.interp[net_sig].ai_frame = -1;
-		Oo_info.interp[net_sig].anticipated_angles_a = vmd_zero_angles;
-		Oo_info.interp[net_sig].anticipated_angles_b = vmd_zero_angles;
-		Oo_info.interp[net_sig].anticipated_angles_c = vmd_zero_angles;
-		Oo_info.interp[net_sig].client_simulation_mode = true;
-		Oo_info.interp[net_sig].anticipated_velocity1 = vmd_zero_vector;
-		Oo_info.interp[net_sig].anticipated_velocity2 = vmd_zero_vector;
-		Oo_info.interp[net_sig].anticipated_velocity3 = vmd_zero_vector;
-		Oo_info.interp[net_sig].cur_pack_ai_mode = -1;
-		Oo_info.interp[net_sig].cur_pack_ai_submode = -1;
-		Oo_info.interp[net_sig].cur_pack_des_rot_vel = vmd_zero_vector;
-		Oo_info.interp[net_sig].cur_pack_local_des_vel = vmd_zero_vector;
-		Oo_info.interp[net_sig].cur_pack_pos_frame = 0;
-		Oo_info.interp[net_sig].hull_frame = -1;
-		Oo_info.interp[net_sig].shields_frame = -1;
-		Oo_info.interp[net_sig].subsystems_frame.clear();
-		Oo_info.interp[net_sig].subsystems_frame.push_back(-1); // ship adder recreates the vector entries
-		Oo_info.interp[net_sig].odd_wrap = false;
-		Oo_info.interp[net_sig].old_angles = vmd_zero_angles;
-		Oo_info.interp[net_sig].old_packet_position = vmd_zero_vector;
-		Oo_info.interp[net_sig].orientation_error = vmd_zero_angles;
-		// TODO: ADD EVEN MORE VALUES TO THIS
+
+	oo_packet_and_interp_tracking* interp = &Oo_info.interp[net_sig];
+	// To ensure clean interpolation, we should probably just reset everything.
+	interp->ai_frame = -MAX_FRAMES_RECORDED;
+	interp->cur_pack_pos_frame = -MAX_FRAMES_RECORDED;
+	interp->prev_pack_pos_frame = -MAX_FRAMES_RECORDED;
+	interp->hull_frame = -MAX_FRAMES_RECORDED;
+	interp->shields_frame = -MAX_FRAMES_RECORDED;
+		for (auto subsys : interp->subsystems_frame ){
+			subsys = -MAX_FRAMES_RECORDED; // ship adder recreates the vector entries
+		}
+
+	interp->old_packet_position = vmd_zero_vector;
+	interp->new_packet_position = vmd_zero_vector;
+	interp->position_error = vmd_zero_vector;
+	interp->pos_time_delta = 0.0f;
+
+	interp->new_angles = vmd_zero_angles;
+	interp->old_angles = vmd_zero_angles;
+	interp->anticipated_angles_a = vmd_zero_angles;
+	interp->anticipated_angles_b = vmd_zero_angles;
+	interp->anticipated_angles_c = vmd_zero_angles;
+	interp->orientation_error = vmd_zero_angles;
+	interp->new_orientation = vmd_identity_matrix;
+
+	interp->client_simulation_mode = true;
+	interp->prev_packet_positionless = false;
+
+	interp->new_velocity = vmd_zero_vector;
+	interp->anticipated_velocity1 = vmd_zero_vector;
+	interp->anticipated_velocity2 = vmd_zero_vector;
+	interp->anticipated_velocity3 = vmd_zero_vector;
+
+	interp->cur_pack_ai_mode = -1;
+	interp->cur_pack_ai_submode = -1;
+	interp->cur_pack_des_rot_vel = vmd_zero_vector;
+	interp->cur_pack_local_des_vel = vmd_zero_vector;
+	interp->odd_wrap = Oo_info.last_received_odd_wrap; // we need to set this to match what other ships are getting
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1635,7 +1653,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			// records so that FSO can tell that the incoming frames are newer than what it already saw.
 			if ( most_recent - seq_num > HAS_WRAPPED_MINIMUM ) {
 				interp_data->most_recent_packet = seq_num;
-				interp_data->odd_wrap = !interp_data->odd_wrap;
+				interp_data->odd_wrap = Oo_info.last_received_odd_wrap = !interp_data->odd_wrap;
 
 				interp_data->hull_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 				interp_data->shields_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
@@ -2425,6 +2443,8 @@ void multi_init_oo_and_ship_tracker()
 	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
 		Oo_info.timestamps[i] = MAX_TIME; // This needs to be Max time (or at least some absurdly high number) for rollback to work correctly
 	}
+	Oo_info.last_received_odd_wrap = false;
+
 	Oo_info.rollback_mode = false;
 	Oo_info.rollback_wobjp.clear();
 	Oo_info.rollback_collide_list.clear();
