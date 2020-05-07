@@ -140,7 +140,7 @@ void multi_oo_process();
 void multi_oo_process_update(ubyte *data, header *hinfo);
 
 // initialize all object update timestamps (call whenever entering gameplay state)
-void multi_oo_ship_tracker_init();
+void multi_init_oo_and_ship_tracker();
 
 // send control info for a client (which is basically a "reverse" object update)
 void multi_oo_send_control_info();

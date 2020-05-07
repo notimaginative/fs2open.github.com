@@ -943,7 +943,7 @@ void game_level_init()
 	NavSystem_Init();				// zero out the nav system
 
 	ai_level_init();				//	Call this before ship_init() because it reads ai.tbl.
-	multi_oo_ship_tracker_init();	// Inits/resets multiplayer ship tracking system.  Has to be done before creating any ships.
+	multi_init_oo_and_ship_tracker();	// Inits/resets multiplayer ship tracking system.  Has to be done before creating any ships.
 	ship_level_init();
 	player_level_init();
 	shipfx_flash_init();			// Init the ship gun flash system.
