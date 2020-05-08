@@ -155,7 +155,7 @@ struct oo_general_info{
 
 	// Frame tracking info.
 	int number_of_frames;									// how many frames have we gone through, total.
-	ubyte wrap_count;										// how many times have we wrapped?  Just the smaller type.
+	ushort wrap_count;										// how many times have we wrapped?  Just the smaller type.
 	short larger_wrap_count;
 	ubyte cur_frame_index;									// the current frame index (to access most of the temporarily recorded info)
 
