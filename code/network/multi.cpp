@@ -1250,7 +1250,7 @@ void multi_do_frame()
 			}
 		} else {
 
-			// right before sending new positions, we should do any rollback frame detection
+			// right before sending new positions, we should do any rollback shots and resimulation
 			multi_ship_record_do_rollback();
 
 			// sending new objects from here is dependent on having objects only created after
