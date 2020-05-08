@@ -11976,7 +11976,8 @@ void ai_do_repair_frame(object *objp, ai_info *aip, float frametime)
 {
 	static bool rearm_eta_found=false;
 
-	if (Ships[objp->instance].team == Iff_traitor) {
+	if ( (Ships[objp->instance].team == Iff_traitor) && ((aip->ai_flags[AI::AI_Flags::Awaiting_repair]) || (aip->ai_flags[AI::AI_Flags::Being_repaired])) ) {
+		mprintf(("ai_do_repair_frame 1\n"));
 		ai_abort_rearm_request(objp);
 		return;
 	}
@@ -15262,8 +15263,8 @@ int ai_abort_rearm_request(object *requester_objp)
 {
 	ship		*requester_shipp;
 	ai_info	*requester_aip;
-
-	Assert(requester_objp->type == OBJ_SHIP);
+	//TODO: FIX!!!!
+	//Assert(requester_objp->type == OBJ_SHIP);
 	if(requester_objp->type != OBJ_SHIP){
 		return 0;
 	}

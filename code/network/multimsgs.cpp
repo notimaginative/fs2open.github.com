@@ -2545,7 +2545,8 @@ void send_ship_kill_packet( object *objp, object *other_objp, float percent_kill
 			temp2 = (short)Net_players[pnum].m_player->killer_weapon_index;
 			ADD_SHORT( temp2 );
 
-			ADD_STRING( Net_players[pnum].m_player->killer_parent_name );
+			//ADD_STRING( Net_players[pnum].m_player->killer_parent_name );
+			mprintf(("name of killer: %s", Net_players[pnum].m_player->killer_parent_name));
 		} else {
 			ADD_DATA( was_player );
 		}
@@ -2584,7 +2585,7 @@ void process_ship_kill_packet( ubyte *data, header *hinfo )
 		GET_DATA( killer_objtype );
 		GET_DATA( killer_species );
 		GET_SHORT( killer_weapon_index );
-		GET_STRING( killer_name );
+		//GET_STRING( killer_name );
 	}
 
 	PACKET_SET_SIZE();
@@ -2621,7 +2622,7 @@ void process_ship_kill_packet( ubyte *data, header *hinfo )
 			Net_players[pnum].m_player->killer_objtype = killer_objtype;
 			Net_players[pnum].m_player->killer_species = killer_species;
 			Net_players[pnum].m_player->killer_weapon_index = killer_weapon_index;
-			strcpy_s( Net_players[pnum].m_player->killer_parent_name, killer_name );
+		//	strcpy_s( Net_players[pnum].m_player->killer_parent_name, killer_name );
 		}
 	}	   
 
@@ -7703,7 +7704,7 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 			return;
 		}
 		
-		ubyte wrap = multi_ship_record_calculate_wrap(client_frame);
+		ushort wrap = multi_ship_record_calculate_wrap(client_frame);
 
 		// figure out correct start frame and adjust the time elapsed
 		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
@@ -7749,6 +7750,7 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 			vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
 
 			multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
+			mprintf(("New primary shot system Succeeded with frame %d\n", frame));
 
 		} else {
 		// if the new way fails for some reason, use the old way.

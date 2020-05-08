@@ -479,6 +479,8 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if ( MULTIPLAYER_MASTER ){
 		multi_respawn_broadcast(pl);
 	}
+
+	mprintf(("net_signature for at the end of the respawn is %d \n", objp->net_signature));
 }
 
 // respawns an AI ship.
@@ -721,7 +723,7 @@ void multi_respawn_server()
 	Assert(Net_player->flags & NETINFO_FLAG_AM_MASTER);
 
 	// respawn me
-	multi_respawn_player(Net_player, Net_player->s_info.cur_primary_bank, Net_player->s_info.cur_secondary_bank, Net_player->s_info.cur_link_status, Net_player->s_info.ship_ets, 0, Net_player->p_info.p_objp->name);
+	multi_respawn_player(Net_player, Net_player->s_info.cur_primary_bank, Net_player->s_info.cur_secondary_bank, Net_player->s_info.cur_link_status, Net_player->s_info.ship_ets, Net_player->p_info.p_objp->net_signature, Net_player->p_info.p_objp->name);
 
 	// jump back into the game
 	gameseq_post_event(GS_EVENT_ENTER_GAME);	

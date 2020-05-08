@@ -494,6 +494,8 @@ void multi_client_check_server()
 
 void process_packet_normal(ubyte* data, header *header_info)
 {
+
+	mprintf(("Received Packet Type #%d,\n", data[0]));
 	switch ( data[0] ) {
 
 		case JOIN:
@@ -854,7 +856,6 @@ void process_packet_normal(ubyte* data, header *header_info)
 			break;
 
 		case LINEAR_WEAPON_FIRED:
-			mprintf(("I'M NOT GETTING IT.  PSYCH!\n"));
 			process_non_homing_fired_packet(data, header_info);
 			break;
 
@@ -1250,7 +1251,7 @@ void multi_do_frame()
 			}
 		} else {
 
-			// right before sending new positions, we should do any rollback frame detection
+			// right before sending new positions, we should do any rollback shots and resimulation
 			multi_ship_record_do_rollback();
 
 			// sending new objects from here is dependent on having objects only created after

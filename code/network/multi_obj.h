@@ -59,10 +59,10 @@ void multi_ship_record_increment_frame();
 int multi_find_prev_frame_idx();
 
 // figure out what was the correct wrap
-ubyte multi_ship_record_calculate_wrap(ushort combined_frame);
+ushort multi_ship_record_calculate_wrap(ushort combined_frame);
 
 // find the right frame to start our weapon simulation
-int multi_ship_record_find_frame(ushort client_frame, ubyte wrap, int time_elapsed);
+int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed);
 
 // verify that a given frame exists for a given ship, requires the sequence number that the client sends.
 bool multi_ship_record_verify_frame(object* objp, int seq_num);
