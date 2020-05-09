@@ -1029,8 +1029,8 @@ void multi_oo_build_ship_list(net_player *pl)
 			continue;
 		}
 
-		// don't send info for dying ships
-		if (Ships[Objects[moveup->objnum].instance].flags[Ship::Ship_Flags::Dying]){
+		// don't send info for dying ships -- Cyborg17 - Or dead ships that are going to respawn later.
+		if (Ships[Objects[moveup->objnum].instance].flags[Ship::Ship_Flags::Dying] || Ships[Objects[moveup->objnum].instance].flags[Ship::Ship_Flags::Exploded]) {
 			continue;
 		}		
 
