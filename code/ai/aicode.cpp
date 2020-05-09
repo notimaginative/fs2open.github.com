@@ -15243,8 +15243,8 @@ int ai_abort_rearm_request(object *requester_objp)
 {
 	ship		*requester_shipp;
 	ai_info	*requester_aip;
-
-	Assert(requester_objp->type == OBJ_SHIP);
+	//TODO: FIX!!!!
+	//Assert(requester_objp->type == OBJ_SHIP);
 	if(requester_objp->type != OBJ_SHIP){
 		return 0;
 	}

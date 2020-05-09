@@ -1624,7 +1624,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// if we can't find the object, set pointer to bogus object to continue reading the data
 	if ( (pobjp == nullptr) || (pobjp->type != OBJ_SHIP) || (pobjp->instance < 0) || (pobjp->instance >= MAX_SHIPS) || (Ships[pobjp->instance].ship_info_index < 0) || (Ships[pobjp->instance].ship_info_index >= ship_info_size())) {
 		offset += data_size;
-		mprintf(("but returned early!\n"));
+		mprintf(("but returned early because of general weirdness!\n"));
 		return offset;
 	}
 
@@ -1689,11 +1689,14 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		multi_ship_record_rank_seq_num(pobjp, seq_num);
 	}
 
+	int pos_and_time_data_size = 0;
+
 	// get the timestamp that belonged to this server for this frame.
 	// Because we want as many timestamps as possible, we want to record what we get, no matter when it came from.
 	if (oo_flags & OO_TIMESTAMP) {
 		ubyte timestamp;
-			GET_DATA(timestamp);
+		GET_DATA(timestamp);
+		pos_and_time_data_size++;
 
 		// figure out how many items we may have to create
 		int temp_diff = (int)seq_num - (int)Oo_info.received_frametimes.size() + 1;
@@ -1718,7 +1721,9 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 	// if this is from a player, read his button info
 	if(MULTIPLAYER_MASTER){
-		offset += multi_oo_unpack_client_data(pl, data + offset);		
+		int r0 = multi_oo_unpack_client_data(pl, data + offset);		
+		pos_and_time_data_size += r0;
+		offset += r0;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -1746,10 +1751,12 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		// unpack position
 		int r1 = multi_pack_unpack_position(0, data + offset, &new_pos);
 		offset += r1;
+		pos_and_time_data_size += r1;
 
 		// unpack orientation
 		int r2 = multi_pack_unpack_orient( 0, data + offset, &new_angles );
-		offset += r2;		
+		offset += r2;
+		pos_and_time_data_size += r2;
 		
 		// new version of the orient packer sends angles instead to save on bandwidth, so we'll need the orienation from that.
 		vm_angles_2_matrix(&new_orient, &new_angles);
@@ -1757,20 +1764,24 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 		int r5 = multi_pack_unpack_rotvel( 0, data + offset, &new_phys_info );
 		offset += r5;
+		pos_and_time_data_size += r5;
 
 		// Unpack desired rotational velocity.
 		float desired_rotvel;
 		if (pobjp->phys_info.max_rotvel.xyz.x > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
 				new_phys_info.desired_rotvel.xyz.x = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.x;
+			pos_and_time_data_size++;
 		}
 		if (pobjp->phys_info.max_rotvel.xyz.y > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
 				new_phys_info.desired_rotvel.xyz.y = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.y;
+			pos_and_time_data_size++;
 		}
 		if (pobjp->phys_info.max_rotvel.xyz.z > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
 				new_phys_info.desired_rotvel.xyz.z = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.z;
+			pos_and_time_data_size++;
 		}
 
 		// velocity is calculated from the last two positions
@@ -1779,14 +1790,17 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		if (pobjp->phys_info.max_vel.xyz.x > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
 			local_desired_vel.xyz.x = temp_des_vel * pobjp->phys_info.max_vel.xyz.x;
+			pos_and_time_data_size++;
 		}
 		if (pobjp->phys_info.max_vel.xyz.y > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
 			local_desired_vel.xyz.y = temp_des_vel * pobjp->phys_info.max_vel.xyz.y;
+			pos_and_time_data_size++;
 		}
 		if (pobjp->phys_info.max_vel.xyz.z > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
 			local_desired_vel.xyz.z = temp_des_vel * pobjp->phys_info.max_vel.xyz.z;
+			pos_and_time_data_size++;
 		}
 
 		// change it back to global coordinates.
@@ -1824,7 +1838,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		
 		// Cyborg17 - fully bash if we're 1) past the position update tolerance, 2) so close it doesn't matter, or 3) not moving
 		// Past the update tolerance will cause a jump, but it should be nice and smooth immediately afterwards
-		if(pos_new && (temp_distance > OO_POS_UPDATE_TOLERANCE || temp_distance < 0.5f || new_phys_info.vel == vmd_zero_vector)){
+		if(pos_new && (temp_distance > OO_POS_UPDATE_TOLERANCE || temp_distance < 0.05f || new_phys_info.vel == vmd_zero_vector)){
 			pobjp->pos = new_pos;
 			//Also, make sure that FSO knows that it does not need to smooth anything out
 			interp_data->position_error = vmd_zero_vector;
@@ -1836,7 +1850,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		// for orientation, we should bash for brand new orientations and then let interpolation do its work.  
 		// This is similar to the straight siming that was done before, but the new interpolation makes 
 		// the movement smoother by having the two simulated together when creating the spline 
-		// and also interpolated using the same time deltas.
+		// and using the same time deltas.
 		if (pos_new){
 			pobjp->orient = new_orient;
 			interp_data->new_orientation = new_orient;
@@ -1857,9 +1871,18 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			pobjp->phys_info.rotvel = vmd_zero_vector;
 			pobjp->phys_info.desired_rotvel = vmd_zero_vector;
 
-			// if we haven't moved, there is *no* position error, although it should not matter.
+			// if we haven't moved, there is *no* position error.
 			interp_data->position_error = vmd_zero_vector;
 		}
+	}
+
+	// Packet processing needs to stop here if the ship is leaving, dead or dying to prevent bugs.
+	if (shipp->is_dying_or_departing() || shipp->flags[Ship::Ship_Flags::Exploded]) {
+		mprintf(("but only used position because the ship was dying, departed, or already dead!\n"));
+		mprintf(("offset: %d, data size: %d, pos_and_time_data_size: %d\n", offset, data_size, pos_and_time_data_size));
+		offset = offset + data_size - pos_and_time_data_size;
+		mprintf(("offset is now: %d", offset));
+		return offset;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -1876,7 +1899,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	}	
 
 	// update shields
-	if ((oo_flags & OO_SHIELDS_NEW) && false) {
+	if (oo_flags & OO_SHIELDS_NEW) {
 		float quad = shield_get_max_quad(pobjp);
 
 		// check before unpacking here so we don't have to recheck for each quadrant.
