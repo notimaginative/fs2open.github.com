@@ -915,8 +915,8 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 	oo_packet_and_interp_tracking* interp = &Oo_info.interp[net_sig];
 	// To ensure clean interpolation, we should probably just reset everything.
 	interp->ai_frame = -MAX_FRAMES_RECORDED;
-	interp->cur_pack_pos_frame = -MAX_FRAMES_RECORDED;
-	interp->prev_pack_pos_frame = -MAX_FRAMES_RECORDED;
+	interp->cur_pack_pos_frame = -1;
+	interp->prev_pack_pos_frame = -1;
 	interp->hull_frame = -MAX_FRAMES_RECORDED;
 	interp->shields_frame = -MAX_FRAMES_RECORDED;
 		for (auto subsys : interp->subsystems_frame ){
@@ -2533,8 +2533,8 @@ void multi_init_oo_and_ship_tracker()
 	// create a temporary struct and then stuff it for all ships.
 	oo_packet_and_interp_tracking temp_interp;
 
-	temp_interp.cur_pack_pos_frame = 0;
-	temp_interp.prev_pack_pos_frame = 0;
+	temp_interp.cur_pack_pos_frame = -1;
+	temp_interp.prev_pack_pos_frame = -1;
 
 	temp_interp.client_simulation_mode = true;
 	temp_interp.prev_packet_positionless = false;
@@ -2710,7 +2710,7 @@ void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new
 		}
 
 		// now we'll update the interpolation splines if both points have been set.
-		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > 0) {
+		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > -1) {
 			multi_oo_calc_interp_splines(objp, new_pos, new_ori_mat, new_phys_info);
 		}
 	}
@@ -3064,8 +3064,8 @@ void multi_oo_interp(object* objp)
 
 	float packet_delta = interp_data->pos_time_delta;
 
-	// if this ship doesn't have enough data points yet, pretend it's a normal ship and skip it.
-	if (interp_data->prev_pack_pos_frame == 0) {
+	// if this ship doesn't have enough data points yet or somehow else invalid, pretend it's a normal ship and skip it.
+	if (interp_data->prev_pack_pos_frame == -1) {
 			physics_sim_vel(&objp->pos, &objp->phys_info, flFrametime, &objp->orient);
 			physics_sim_rot(&objp->orient, &objp->phys_info, flFrametime);
 
@@ -3345,7 +3345,7 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx) {
 		}
 		temp_sum += frame_time;
 	}
-	temp_sum /= 1000; // convert from timestamp to float frame time
+	temp_sum /= 1000.0f; // convert from timestamp to float frame time
 
 	return temp_sum;
 }
