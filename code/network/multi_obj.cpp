@@ -116,10 +116,12 @@ struct oo_packet_and_interp_tracking {
 	// we already received a newer packet than this one.
 	bool odd_wrap;
 	int most_recent_packet;
-	int hull_frame;
-	int shields_frame;
-	SCP_vector<int> subsystems_frame;
-	int ai_frame;
+	int pos_comparison_frame;
+	int prev_pos_comparison_frame;
+	int hull_comparison_frame;
+	int shields_comparison_frame;
+	SCP_vector<int> subsystems_comparison_frame;
+	int ai_comparison_frame;
 
 };
 
@@ -315,7 +317,7 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 
 // Add a new ship to the tracking struct once it's valid in a mission.
 void multi_ship_record_add_ship(int obj_num)
-{
+{mprintf(("1\n"));
 	object* objp = &Objects[obj_num];
 	int net_sig_idx = objp->net_signature;
 
@@ -345,18 +347,17 @@ void multi_ship_record_add_ship(int obj_num)
 			}
 			current_size++;
 		}
-	} // and if I missed something.
+	} 
 
-	  // Have this ready for later when we're sure that it works correctly at least most of the time.
-	Assertion(net_sig_idx <= (current_size + 1), "New entry into the ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and current_size %d\n", net_sig_idx, current_size);
+	Assertion(net_sig_idx <= (current_size + 1), "New entry into the multi ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and current_size %d\n", net_sig_idx, current_size);
 
 	ship_info* sip = &Ship_info[Ships[objp->instance].ship_info_index];
 
 	// To use vectors for the subsystems, we have to init the subsystem tracking vectors here.
 	int subsystem_count = sip->n_subsystems;
 
-	while (Oo_info.interp[net_sig_idx].subsystems_frame.size() < subsystem_count) {
-		Oo_info.interp[net_sig_idx].subsystems_frame.push_back(-1);
+	while (Oo_info.interp[net_sig_idx].subsystems_comparison_frame.size() < subsystem_count) {
+		Oo_info.interp[net_sig_idx].subsystems_comparison_frame.push_back(-1);
 
 		for (int i = 0; i < MAX_PLAYERS; i++) {
 			Oo_info.player_frame_info[i].last_sent[net_sig_idx].subsystems.push_back(-1.0f) ;
@@ -402,8 +403,9 @@ void multi_ship_record_update_all()
 		 
 		net_sig_idx = objp->net_signature;
 
+		Assertion(net_sig_idx <= STANDALONE_SHIP_SIG, "Multi tracker got an invalid index of %d while updating it records. This is likely a coder error, please report!", net_sig_idx);
 		// make sure it's a valid index.
-		if (net_sig_idx < 1) {
+		if (net_sig_idx < SHIP_SIG_MIN || net_sig_idx == STANDALONE_SHIP_SIG || net_sig_idx > SHIP_SIG_MAX) {
 			 continue;
 		}
 
@@ -914,12 +916,14 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 
 	oo_packet_and_interp_tracking* interp = &Oo_info.interp[net_sig];
 	// To ensure clean interpolation, we should probably just reset everything.
-	interp->ai_frame = -MAX_FRAMES_RECORDED;
-	interp->cur_pack_pos_frame = -MAX_FRAMES_RECORDED;
-	interp->prev_pack_pos_frame = -MAX_FRAMES_RECORDED;
-	interp->hull_frame = -MAX_FRAMES_RECORDED;
-	interp->shields_frame = -MAX_FRAMES_RECORDED;
-		for (auto subsys : interp->subsystems_frame ){
+	interp->ai_comparison_frame = -MAX_FRAMES_RECORDED;
+	interp->cur_pack_pos_frame = -1;
+	interp->prev_pack_pos_frame = -1;
+	interp->pos_comparison_frame = -MAX_FRAMES_RECORDED;
+	interp->prev_pos_comparison_frame = -MAX_FRAMES_RECORDED;
+	interp->hull_comparison_frame = -MAX_FRAMES_RECORDED;
+	interp->shields_comparison_frame = -MAX_FRAMES_RECORDED;
+		for (auto subsys : interp->subsystems_comparison_frame ){
 			subsys = -MAX_FRAMES_RECORDED; // ship adder recreates the vector entries
 		}
 
@@ -1595,7 +1599,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	GET_DATA(data_size);
 	GET_USHORT(seq_num);
 
-	mprintf(("packet foo! seq num: %d, oo_flags: %d, data size: %d, \n", oo_flags, data_size, seq_num));
+	mprintf(("packet foo! seq num: %d, oo_flags: %d, data size: %d, ", oo_flags, data_size, seq_num));
 
 	if (MULTIPLAYER_MASTER) {
 		// client cannot send these types because the server is in charge of all of these things.
@@ -1666,14 +1670,16 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 				interp_data->most_recent_packet = seq_num;
 				interp_data->odd_wrap = Oo_info.last_received_odd_wrap = !interp_data->odd_wrap;
 
-				interp_data->hull_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
-				interp_data->shields_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->pos_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->prev_pos_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->hull_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->shields_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 
-				for (auto subsys_frame = interp_data->subsystems_frame.begin(); subsys_frame != interp_data->subsystems_frame.end(); subsys_frame++) {
+				for (auto subsys_frame = interp_data->subsystems_comparison_frame.begin(); subsys_frame != interp_data->subsystems_comparison_frame.end(); subsys_frame++) {
 
 					subsys_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 				}
-				interp_data->ai_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
+				interp_data->ai_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 
 			}
 		} // if this a pre-wrap out-of-order packet, we have to mark it as so, so that we adjust seq_num for the individual checks
@@ -1807,24 +1813,38 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
 
 		// make sure this is the newest frame sent and then start storing everything.
-		if (frame_comparison > interp_data->cur_pack_pos_frame) {
+		if (frame_comparison > interp_data->pos_comparison_frame) {
 			// mark this packet as a brand new update.
 			pos_new = true;
-			adjust_interp_pos = true;
 
 			// make sure to turn off no position change mode.
 			interp_data->prev_packet_positionless = false;
 
 			// update timing info, position
 			interp_data->prev_pack_pos_frame = interp_data->cur_pack_pos_frame;
-			interp_data->cur_pack_pos_frame = seq_num;
+			interp_data->prev_pos_comparison_frame = interp_data->pos_comparison_frame;
+			interp_data->cur_pack_pos_frame = interp_data->pos_comparison_frame = seq_num;
+			// double check that we have valid data
+			if (interp_data->prev_pack_pos_frame != interp_data->cur_pack_pos_frame) {
+				adjust_interp_pos = true;
+			}
+			else {
+				mprintf(("WE HAVE THE MATCHING CONDITION, interp data was not updated! seq_num: %d  (both now equal that).  \n", seq_num));
+			}
+
 			interp_data->pos_timestamp = timestamp();
 
 		} // if we actually received a slightly old frame...
-		else if (frame_comparison > interp_data->prev_pack_pos_frame){
+		else if (frame_comparison > interp_data->prev_pos_comparison_frame){
 			//update timing info.
-			interp_data->prev_pack_pos_frame = seq_num;
-			adjust_interp_pos = true;
+			if (seq_num != interp_data->cur_pack_pos_frame) {
+				interp_data->prev_pack_pos_frame = interp_data->prev_pos_comparison_frame = seq_num;
+				adjust_interp_pos = true;
+			}
+			else {
+				mprintf(("WE HAVE THE MATCHING CONDITION, interp data was not updated! seq_num: %d  (both now would have equaled that).  \n", seq_num));
+			}
+
 		}
 
 		if (pos_new) {
@@ -1892,9 +1912,9 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// hull info
 	if ( oo_flags & OO_HULL_NEW ){
 		UNPACK_PERCENT(fpct);
-		if (interp_data->hull_frame < frame_comparison) {
+		if (interp_data->hull_comparison_frame < frame_comparison) {
 			pobjp->hull_strength = fpct * Ships[pobjp->instance].ship_max_hull_strength;
-			interp_data->hull_frame = seq_num;
+			interp_data->hull_comparison_frame = seq_num;
 		}
 	}	
 
@@ -1903,12 +1923,12 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		float quad = shield_get_max_quad(pobjp);
 
 		// check before unpacking here so we don't have to recheck for each quadrant.
-		if (interp_data->shields_frame < frame_comparison) {
+		if (interp_data->shields_comparison_frame < frame_comparison) {
 			for (int i = 0; i < pobjp->n_quadrants; i++) {
 				UNPACK_PERCENT(fpct);
 				pobjp->shield_quadrant[i] = fpct * quad;
 			}
-			interp_data->shields_frame = seq_num;
+			interp_data->shields_comparison_frame = seq_num;
 		}
 		else {
 			for (int i = 0; i < pobjp->n_quadrants; i++) {
@@ -1944,7 +1964,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			UNPACK_PERCENT(current_percent);
 
 			// update frame is *per* subsystem here
-			if (frame_comparison > interp_data->subsystems_frame[idx]) {
+			if (frame_comparison > interp_data->subsystems_comparison_frame[idx]) {
 				subsysp->current_hits = current_percent * subsysp->max_hits;
 				subsys_count++;
 
@@ -1987,7 +2007,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		float weapon_energy_pct;
 		UNPACK_PERCENT(weapon_energy_pct);
 
-		if( frame_comparison > interp_data->ai_frame ){
+		if( frame_comparison > interp_data->ai_comparison_frame ){
 			if ( shipp->ai_index >= 0 ){
 				// make sure to undo the wrap if it occurred during compression for unset ai mode.
 				if (umode == 255) {
@@ -2533,8 +2553,8 @@ void multi_init_oo_and_ship_tracker()
 	// create a temporary struct and then stuff it for all ships.
 	oo_packet_and_interp_tracking temp_interp;
 
-	temp_interp.cur_pack_pos_frame = 0;
-	temp_interp.prev_pack_pos_frame = 0;
+	temp_interp.cur_pack_pos_frame = -1;
+	temp_interp.prev_pack_pos_frame = -1;
 
 	temp_interp.client_simulation_mode = true;
 	temp_interp.prev_packet_positionless = false;
@@ -2567,12 +2587,14 @@ void multi_init_oo_and_ship_tracker()
 
 	temp_interp.odd_wrap = false;
 	temp_interp.most_recent_packet = -1;
-	temp_interp.hull_frame = -1;
-	temp_interp.shields_frame = -1;
+	temp_interp.pos_comparison_frame = -1;
+	temp_interp.prev_pos_comparison_frame = -1;
+	temp_interp.hull_comparison_frame = -1;
+	temp_interp.shields_comparison_frame = -1;
 
-	temp_interp.subsystems_frame.push_back(-1);
+	temp_interp.subsystems_comparison_frame.push_back(-1);
 
-	temp_interp.ai_frame = -1;
+	temp_interp.ai_comparison_frame = -1;
 	Oo_info.interp.push_back(temp_interp);
 
 	// reset datarate stamp now
@@ -2710,7 +2732,7 @@ void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new
 		}
 
 		// now we'll update the interpolation splines if both points have been set.
-		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > 0) {
+		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > -1) {
 			multi_oo_calc_interp_splines(objp, new_pos, new_ori_mat, new_phys_info);
 		}
 	}
@@ -3041,7 +3063,9 @@ void multi_oo_interp(object* objp)
 {	//mprintf(("I'm the last one to run! 33\n"));
 	// make sure its a valid ship
 	Assert(Game_mode & GM_MULTIPLAYER);
-	if (objp->type != OBJ_SHIP) {
+	Assert(objp->net_signature <= STANDALONE_SHIP_SIG);
+
+	if (objp->type != OBJ_SHIP || objp->net_signature == STANDALONE_SHIP_SIG) {
 		return;
 	}
 	if ((objp->instance < 0) || (objp->instance >= MAX_SHIPS)) {
@@ -3064,8 +3088,8 @@ void multi_oo_interp(object* objp)
 
 	float packet_delta = interp_data->pos_time_delta;
 
-	// if this ship doesn't have enough data points yet, pretend it's a normal ship and skip it.
-	if (interp_data->prev_pack_pos_frame == 0) {
+	// if this ship doesn't have enough data points yet or somehow else invalid, pretend it's a normal ship and skip it.
+	if (interp_data->prev_pack_pos_frame == -1) {
 			physics_sim_vel(&objp->pos, &objp->phys_info, flFrametime, &objp->orient);
 			physics_sim_rot(&objp->orient, &objp->phys_info, flFrametime);
 
@@ -3345,7 +3369,7 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx) {
 		}
 		temp_sum += frame_time;
 	}
-	temp_sum /= 1000; // convert from timestamp to float frame time
+	temp_sum /= 1000.0f; // convert from timestamp to float frame time
 
 	return temp_sum;
 }
