@@ -317,7 +317,7 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 
 // Add a new ship to the tracking struct once it's valid in a mission.
 void multi_ship_record_add_ship(int obj_num)
-{
+{mprintf(("1\n"));
 	object* objp = &Objects[obj_num];
 	int net_sig_idx = objp->net_signature;
 
@@ -347,10 +347,9 @@ void multi_ship_record_add_ship(int obj_num)
 			}
 			current_size++;
 		}
-	} // and if I missed something.
+	} 
 
-	  // Have this ready for later when we're sure that it works correctly at least most of the time.
-	Assertion(net_sig_idx <= (current_size + 1), "New entry into the ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and current_size %d\n", net_sig_idx, current_size);
+	Assertion(net_sig_idx <= (current_size + 1), "New entry into the multi ship traker struct does not equal the index that should belong to it.\nNet_signature: %d and current_size %d\n", net_sig_idx, current_size);
 
 	ship_info* sip = &Ship_info[Ships[objp->instance].ship_info_index];
 
@@ -404,8 +403,9 @@ void multi_ship_record_update_all()
 		 
 		net_sig_idx = objp->net_signature;
 
+		Assertion(net_sig_idx <= STANDALONE_SHIP_SIG, "Multi tracker got an invalid index of %d while updating it records. This is likely a coder error, please report!", net_sig_idx);
 		// make sure it's a valid index.
-		if (net_sig_idx < 1) {
+		if (net_sig_idx < SHIP_SIG_MIN || net_sig_idx == STANDALONE_SHIP_SIG || net_sig_idx > SHIP_SIG_MAX) {
 			 continue;
 		}
 
@@ -1599,7 +1599,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	GET_DATA(data_size);
 	GET_USHORT(seq_num);
 
-	mprintf(("packet foo! seq num: %d, oo_flags: %d, data size: %d, \n", oo_flags, data_size, seq_num));
+	mprintf(("packet foo! seq num: %d, oo_flags: %d, data size: %d, ", oo_flags, data_size, seq_num));
 
 	if (MULTIPLAYER_MASTER) {
 		// client cannot send these types because the server is in charge of all of these things.
@@ -3063,7 +3063,9 @@ void multi_oo_interp(object* objp)
 {	//mprintf(("I'm the last one to run! 33\n"));
 	// make sure its a valid ship
 	Assert(Game_mode & GM_MULTIPLAYER);
-	if (objp->type != OBJ_SHIP) {
+	Assert(objp->net_signature <= STANDALONE_SHIP_SIG);
+
+	if (objp->type != OBJ_SHIP || objp->net_signature == STANDALONE_SHIP_SIG) {
 		return;
 	}
 	if ((objp->instance < 0) || (objp->instance >= MAX_SHIPS)) {
