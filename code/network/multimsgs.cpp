@@ -7690,7 +7690,6 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		objp_ref = multi_get_network_object(target_ref);
 
 		if (objp_ref == nullptr) {
-			mprintf(("packet failed beecause of nullptr\n"));
 			// new way failed, use the old new way.
 			if (secondary) {
 				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
@@ -7699,16 +7698,13 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 			} else { 
 				ship_fire_primary(objp, 0, 1);
 			}
-
-
 			return;
 		}
 		
+		// figure out correct start frame and wrap
 		ushort wrap = multi_ship_record_calculate_wrap(client_frame);
-
-		// figure out correct start frame and adjust the time elapsed
 		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
-		
+
 		if (frame > -1) {
 			// make sure that record we would access is from this ship!
 		//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
@@ -7724,7 +7720,6 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
 			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
-
 			// find out where the angle to the new primary fire should be, by
 			// rotating the vector
 
@@ -7732,25 +7727,18 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			// figure out the new position for the firing ship.
 			vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
-
 			// Finish finding the shot's starting position	
 			vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
-
 			// "decompress" the orientation matrix from the packet's angles.
 					vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
-					vm_orthogonalize_matrix(&adjust_ship_matrix);
+					//vm_orthogonalize_matrix(&adjust_ship_matrix);
 					vm_angles_2_matrix(&old_player_ori, &player_ship_angles);
-					vm_orthogonalize_matrix(&old_player_ori);
-
+					//vm_orthogonalize_matrix(&old_player_ori);
 			// Now multiply the two matrices for the orientation of the weapon.
 			vm_matrix_x_matrix(&new_ship_ori, &new_tar_ori, &adjust_ship_matrix);
-
 			vm_orthogonalize_matrix(&new_ship_ori);
-
 			vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
-
 			multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
-			mprintf(("New primary shot system Succeeded with frame %d\n", frame));
 
 		} else {
 		// if the new way fails for some reason, use the old way.
