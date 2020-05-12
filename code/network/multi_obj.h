@@ -37,7 +37,7 @@ struct weapon;
 #define OOC_AFTERBURNER_ON			(1<<7)
 // NOTE: no additional flags here unless it's sent in an extra data byte
 
-// Cyborg17, Server will be tracking only the last second of frames
+// Cyborg17, Server will be tracking only the last thirty frames
 #define MAX_FRAMES_RECORDED		30
 #define PRIMARY_PACKET_CUTOFF			2000
 
@@ -54,9 +54,6 @@ void multi_ship_record_update_all();
 
 // increment the tracker per frame, before incoming object packets are processed
 void multi_ship_record_increment_frame();
-
-// returns the last frame's index.
-int multi_find_prev_frame_idx();
 
 // figure out what was the correct wrap
 ushort multi_ship_record_calculate_wrap(ushort combined_frame);
@@ -149,9 +146,6 @@ void multi_oo_send_changed_object(object *changedobj);
 // helper function that updates all interpolation info for a specific ship from a packet
 void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new_ori_angles, matrix* new_ori_mat, physics_info* new_phys_info, bool adjust_pos, bool newest_pos);
 
-// reset all sequencing info
-void multi_oo_reset_sequencing();
-
 // is this object one which needs to go through the interpolation
 int multi_oo_is_interp_object(object *objp);
 
@@ -160,10 +154,6 @@ void multi_oo_interp(object *objp);
 
 // recalculate how much time is between position packets
 float multi_oo_calc_pos_time_difference(int net_sig_idx);
-
-// Cyborg17 - sort through subsystems to make sure we only update the ones we need to update.
-//int multi_pack_required_subsytems(ship* shipp, ubyte* data, int packet_size, int header_bytes);
-
 
 // ---------------------------------------------------------------------------------------------------
 // DATARATE DEFINES/VARS

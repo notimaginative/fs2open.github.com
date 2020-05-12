@@ -418,7 +418,7 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if(!(Net_player->flags & NETINFO_FLAG_AM_MASTER)){
 		objp->net_signature = net_sig;
 	}
-
+	
 	// restore the correct weapon bank selections
 	shipp->weapons.current_primary_bank = (int)cur_primary_bank;
 	shipp->weapons.current_secondary_bank = (int)cur_secondary_bank;
@@ -479,8 +479,6 @@ void multi_respawn_player(net_player *pl, char cur_primary_bank, char cur_second
 	if ( MULTIPLAYER_MASTER ){
 		multi_respawn_broadcast(pl);
 	}
-
-	mprintf(("net_signature for at the end of the respawn is %d \n", objp->net_signature));
 }
 
 // respawns an AI ship.
@@ -490,7 +488,7 @@ void multi_respawn_ai( p_object *pobjp )
 	object *objp;
 
 	// create the object and change the ship type
-	objnum = multi_respawn_common_stuff( pobjp);
+	objnum = multi_respawn_common_stuff( pobjp );
 	objp = &Objects[objnum];
 
 	// be sure the the OF_PLAYER_SHIP flag is unset, and the could be player flag is set

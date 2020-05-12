@@ -9608,7 +9608,7 @@ int ship_create(matrix* orient, vec3d* pos, int ship_type, const char* ship_name
 			multi_ship_record_add_ship_client(objnum);
 		}
 
-	// Start up stracking for this ship in multi.
+	// Start up tracking for this ship in multi.
 	if (Game_mode & (GM_MULTIPLAYER)) {
 		multi_ship_record_add_ship(objnum);
 	}
@@ -10801,7 +10801,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 	if((obj->type != OBJ_SHIP) || (n < 0) || (n >= MAX_SHIPS) || (Ships[n].objnum != OBJ_INDEX(obj))){
 		return 0;
 	}
-
 	shipp = &Ships[n];
 	swp = &shipp->weapons;
 
@@ -10860,7 +10859,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 	has_converging_autoaim = ((sip->aiming_flags[Ship::Aiming_Flags::Autoaim_convergence] || (The_mission.ai_profile->player_autoaim_fov[Game_skill_level] > 0.0f && !( Game_mode & GM_MULTIPLAYER ))) && aip->target_objnum != -1);
 	has_autoaim = ((has_converging_autoaim || (sip->aiming_flags[Ship::Aiming_Flags::Autoaim])) && aip->target_objnum != -1);
 	needs_target_pos = ((has_autoaim || (sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence])) && aip->target_objnum != -1);
-
+	
 	if (needs_target_pos) {
 		if (has_autoaim) {
 			autoaim_fov = MAX(shipp->autoaim_fov, The_mission.ai_profile->player_autoaim_fov[Game_skill_level]);
@@ -10922,7 +10921,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 			if (shipp->primary_rotate_rate[bank_to_fire] < winfo_p->weapon_submodel_rotate_vel)
 				continue;
 		}
-
 		// if this is a targeting laser, start it up   ///- only targeting laser if it is tag-c, otherwise it's a fighter beam -Bobboau
 		if((winfo_p->wi_flags[Weapon::Info_Flags::Beam]) && (winfo_p->tag_level == 3) && (shipp->flags[Ship_Flags::Trigger_down]) && (winfo_p->b_info.beam_type == BEAM_TYPE_C) ){
 			ship_start_targeting_laser(shipp);
@@ -10977,7 +10975,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 		// Goober5000 (thanks to _argv[-1] for the original idea)
 		if ( (num_primary_banks > 1) &&  !(winfo_p->wi_flags[Weapon::Info_Flags::No_linked_penalty]) && !(The_mission.ai_profile->flags[AI::Profile_Flags::Disable_linked_fire_penalty]) )
 		{
-
 			int effective_primary_banks = 0;
 			for (int it = 0; it < num_primary_banks; it++)
 			{
@@ -11087,7 +11084,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 					dist_to_aim = sip->minimum_convergence_distance;
 				}
 			}
-
+			
 			if(winfo_p->wi_flags[Weapon::Info_Flags::Beam]){		// the big change I made for fighter beams, if there beams fill out the Fire_Info for a targeting laser then fire it, for each point in the weapon bank -Bobboau
 				float t;
 				if (winfo_p->burst_shots > swp->burst_counter[bank_to_fire]) {
@@ -11204,6 +11201,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 					continue;
 				}
 				// moved the above to here to use points instead of num_slots for energy consumption check
+
 				// ballistics support for primaries - Goober5000
 				if ( winfo_p->wi_flags[Weapon::Info_Flags::Ballistic] )
 				{
@@ -11237,7 +11235,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 						}
 						continue;
 					}
-
+					
 					// deplete ammo
 					if ( Weapon_energy_cheat == 0 )
 					{
@@ -11318,7 +11316,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 								V SIF convergence
 								no convergence or autoaim
 							*/
-
 							if (has_autoaim && in_automatic_aim_fov) {
 								vec3d firing_vec;
 
@@ -11334,7 +11331,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 							} else if ((sip->aiming_flags[Ship::Aiming_Flags::Std_convergence]) || ((sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence]) && (aip->target_objnum != -1))) {
 								// std & auto convergence
 								vec3d target_vec, firing_vec, convergence_offset;
-
+								
 								// make sure vector is of the set length
 								vm_vec_copy_normalize(&target_vec, &player_forward_vec);
 								if ((sip->aiming_flags[Ship::Aiming_Flags::Auto_convergence]) && (aip->target_objnum != -1)) {
@@ -11393,7 +11390,6 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 							winfo_p = &Weapon_info[Weapons[Objects[weapon_objnum].instance].weapon_info_index];
 							has_fired = true;
 
-
 							weapon_set_tracking_info(weapon_objnum, OBJ_INDEX(obj), aip->target_objnum, aip->current_target_is_locked, aip->targeted_subsys);				
 
 							if (winfo_p->wi_flags[Weapon::Info_Flags::Flak])
@@ -11448,7 +11444,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;				
 
 							// maybe add this weapon to the list of those we need to roll forward
-							if ((Game_mode & GM_MULTIPLAYER) && rollback_shot) {
+							if ((Game_mode & (GM_MULTIPLAYER | GM_STANDALONE_SERVER )) && rollback_shot) {
 								multi_ship_record_add_rollback_wep(weapon_objnum);
 							}
 						}
@@ -11819,6 +11815,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 	swp = &shipp->weapons;
 	sip = &Ship_info[shipp->ship_info_index];
 	aip = &Ai_info[shipp->ai_index];
+
 	// if no secondary weapons are present on ship, return
 	if ( swp->num_secondary_banks <= 0 ){
 		return 0;
@@ -11962,6 +11959,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 	}
 
 
+
 	// if trying to fire a swarm missile, make sure being called from right place
 	if ( (wip->wi_flags[Weapon::Info_Flags::Swarm]) && !allow_swarm ) {
 		Assert(wip->swarm_count > 0);
@@ -12009,7 +12007,6 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 			goto done_secondary;
 		}
 	}
-
 
 	pm = model_get( sip->model_num );
 	if ( pm->n_missiles > 0 ) {
@@ -12164,7 +12161,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 				swp->last_fired_weapon_signature = Objects[weapon_num].signature;
 
 				// possibly add this to the rollback vector
-				if ((Game_mode & GM_MULTIPLAYER) && rollback_shot){
+				if ((Game_mode & (GM_MULTIPLAYER | GM_STANDALONE_SERVER)) && rollback_shot){
 					multi_ship_record_add_rollback_wep(weapon_num);
 				}
 

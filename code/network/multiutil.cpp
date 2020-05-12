@@ -117,7 +117,7 @@ ushort multi_assign_network_signature( int what_kind )
 		sig = Next_ship_signature++;
 
 		if ( Next_ship_signature == SHIP_SIG_MAX ) {
-			Int3();			// get Allender -- signature stuff wrapped.
+			Warning(LOCATION,"Ship multi_signatures have wrapped.  This should not be possible, unless you are adding way too many ships to a multi mission. Please report if this is not the case!");
 			Next_ship_signature = SHIP_SIG_MIN;
 		}
 
@@ -3499,10 +3499,9 @@ int multi_pack_unpack_orient( int write, ubyte *data, angles *angles)
 	const int n_max_range =  32767;
 
 	if ( write )	{			
-		// Subtract PI/2 because the output of vm_extract_angles_matrix is from -PI/2 to 3PI/2
-		a = fl2i(round((angles->b/* - PI/2*/) * n_scale)); 
-		b = fl2i(round((angles->h/* - PI/2*/) * n_scale));
-		c = fl2i(round((angles->p/* - PI/2*/) * n_scale));
+		a = fl2i(round(angles->b * n_scale)); 
+		b = fl2i(round(angles->h * n_scale));
+		c = fl2i(round(angles->p * n_scale));
 
 		CAP(a, n_min_range, n_max_range);
 		CAP(b, n_min_range, n_max_range);
@@ -3519,9 +3518,9 @@ int multi_pack_unpack_orient( int write, ubyte *data, angles *angles)
 		b = bitbuffer_get_signed(&buf,16);
 		c = bitbuffer_get_signed(&buf,16);
 
-		angles->b =/* PI/2 +*/ (i2fl(a)/n_scale);
-		angles->h =/* PI/2 +*/ (i2fl(b)/n_scale);
-		angles->p =/* PI/2 +*/ (i2fl(c)/n_scale);
+		angles->b = (i2fl(a)/n_scale);
+		angles->h = (i2fl(b)/n_scale);
+		angles->p = (i2fl(c)/n_scale);
 		
 		return bitbuffer_read_flush(&buf);
 	}
@@ -3609,6 +3608,82 @@ int multi_pack_unpack_rotvel( int write, ubyte *data, physics_info *pi)
 		pi->rotvel.xyz.x = i2fl(a)/32.0f;
 		pi->rotvel.xyz.y = i2fl(b)/32.0f;
 		pi->rotvel.xyz.z = i2fl(c)/32.0f;
+
+		return bitbuffer_read_flush(&buf);
+	}
+}
+
+ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, physics_info *pi, vec3d local_desired_vel)
+{
+	bitbuffer buf;
+
+	bitbuffer_init(&buf,data);
+
+	int a = 0, b = 0, c = 0;
+	int d = 0, e = 0, f = 0;
+
+	if ( write )	{
+		// output desired rotational velocity
+		if (pi->max_rotvel.xyz.x > 0.0f) {
+			a = fl2i(round( (pi->desired_rotvel.xyz.x / pi->max_rotvel.xyz.x) * 64.0f)); 
+		}
+
+		if (pi->max_rotvel.xyz.y > 0.0f) {
+			b = fl2i(round( (pi->desired_rotvel.xyz.y / pi->max_rotvel.xyz.y) * 64.0f));
+		}
+
+		if (pi->max_rotvel.xyz.z > 0.0f) {
+			c = fl2i(round( (pi->desired_rotvel.xyz.z / pi->max_rotvel.xyz.z) * 64.0f));
+		}
+
+		CAP(a,-64,63);
+		CAP(b,-64,63);
+		CAP(c,-64,63);
+		bitbuffer_put( &buf, (uint)a,5);
+		bitbuffer_put( &buf, (uint)b,5);
+		bitbuffer_put( &buf, (uint)c,5);
+
+		if (pi->max_vel.xyz.x > 0.0f) {
+			d = fl2i(round( (local_desired_vel.xyz.x / pi->max_vel.xyz.x) * 64.0f)); 
+		}
+
+		if (pi->max_vel.xyz.y > 0.0f) {
+			e = fl2i(round( (local_desired_vel.xyz.y / pi->max_vel.xyz.y) * 64.0f));
+		}
+
+		if (pi->max_vel.xyz.z > 0.0f) {
+			f = fl2i(round( (local_desired_vel.xyz.z / pi->max_vel.xyz.z) * 256.0f));
+		}
+
+		CAP(d,-64,63);
+		CAP(e,-64,63);
+		CAP(f,-256,255);
+		bitbuffer_put( &buf, (uint)a,5);
+		bitbuffer_put( &buf, (uint)b,5);
+		bitbuffer_put( &buf, (uint)c,7);
+
+
+
+		return bitbuffer_write_flush(&buf);
+
+	} else {
+
+		// unpack desired rotational velocity
+		a = bitbuffer_get_signed(&buf,5);
+		b = bitbuffer_get_signed(&buf,5);
+		c = bitbuffer_get_signed(&buf,5);
+		pi->rotvel.xyz.x = pi->max_rotvel.xyz.x * i2fl(a)/64.0f;
+		pi->rotvel.xyz.y = pi->max_rotvel.xyz.y * i2fl(b)/64.0f;
+		pi->rotvel.xyz.z = pi->max_rotvel.xyz.z * i2fl(c)/64.0f;
+
+		// unpack desired velocity
+		d = bitbuffer_get_signed(&buf,5);
+		e = bitbuffer_get_signed(&buf,5);
+		f = bitbuffer_get_signed(&buf,7);
+		local_desired_vel.xyz.x = pi->max_vel.xyz.x * i2fl(d)/64.0f;
+		local_desired_vel.xyz.y = pi->max_vel.xyz.y * i2fl(e)/64.0f;
+		local_desired_vel.xyz.z = pi->max_vel.xyz.z * i2fl(f)/256.0f;
+
 
 		return bitbuffer_read_flush(&buf);
 	}

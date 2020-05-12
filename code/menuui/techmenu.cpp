@@ -1395,14 +1395,12 @@ void techroom_do_frame(float frametime)
 	for (i=0; i<LIST_BUTTONS_MAX; i++) {
 		if (List_buttons[i].is_mouse_on()) {
 			Select_tease_line = i + List_offset;
-			mprintf(("I'm on a button in the techroom, i is: %d\n", i));
 		}
 	
 		if (List_buttons[i].pressed()) {
 			Cur_entry = i + List_offset;
 			gamesnd_play_iface(InterfaceSounds::USER_SELECT);
 			techroom_select_new_entry();
-			mprintf(("I'm clicking on a button in the techroom, i is: %d\n", i));
 		}
 	}
 

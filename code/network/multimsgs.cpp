@@ -1937,11 +1937,11 @@ void send_game_active_packet(net_addr* addr)
 // process information about an active game
 void process_game_active_packet(ubyte* data, header* hinfo)
 {
-	int offset;
+	int offset;	
 	ubyte val;
 	active_game ag;
 	int modes_compatible = 1;
-
+	
 	fill_net_addr(&ag.server_addr, hinfo->addr, hinfo->port);
 
 	// read this game into a temporary structure
@@ -1953,7 +1953,7 @@ void process_game_active_packet(ubyte* data, header* hinfo)
 
 	GET_STRING(ag.name);
 	GET_STRING(ag.mission_name);
-	GET_STRING(ag.title);
+	GET_STRING(ag.title);	
 	GET_DATA(val);
 	ag.num_players = val;
 	GET_USHORT(ag.flags);
@@ -2545,8 +2545,7 @@ void send_ship_kill_packet( object *objp, object *other_objp, float percent_kill
 			temp2 = (short)Net_players[pnum].m_player->killer_weapon_index;
 			ADD_SHORT( temp2 );
 
-			//ADD_STRING( Net_players[pnum].m_player->killer_parent_name );
-			mprintf(("name of killer: %s", Net_players[pnum].m_player->killer_parent_name));
+			ADD_STRING( Net_players[pnum].m_player->killer_parent_name );
 		} else {
 			ADD_DATA( was_player );
 		}
@@ -2585,7 +2584,7 @@ void process_ship_kill_packet( ubyte *data, header *hinfo )
 		GET_DATA( killer_objtype );
 		GET_DATA( killer_species );
 		GET_SHORT( killer_weapon_index );
-		//GET_STRING( killer_name );
+		GET_STRING( killer_name );
 	}
 
 	PACKET_SET_SIZE();
@@ -2622,7 +2621,7 @@ void process_ship_kill_packet( ubyte *data, header *hinfo )
 			Net_players[pnum].m_player->killer_objtype = killer_objtype;
 			Net_players[pnum].m_player->killer_species = killer_species;
 			Net_players[pnum].m_player->killer_weapon_index = killer_weapon_index;
-		//	strcpy_s( Net_players[pnum].m_player->killer_parent_name, killer_name );
+			strcpy_s( Net_players[pnum].m_player->killer_parent_name, killer_name );
 		}
 	}	   
 
@@ -2641,6 +2640,7 @@ void process_ship_kill_packet( ubyte *data, header *hinfo )
 
 	// do the normal thing when not ingame joining.  When ingame joining, simply kill off the ship.
 	if ( !(Net_player->flags & NETINFO_FLAG_INGAME_JOIN) ) {
+		mprintf(("killing ship_kill_packet.\n"));
 		ship_hit_kill( sobjp, oobjp, percent_killed, sd );
 	} else {
         sobjp->flags.set(Object::Object_Flags::Should_be_dead);
@@ -3056,7 +3056,6 @@ void send_secondary_fired_packet( ship *shipp, ushort starting_sig, int  /*start
 /// process a packet indicating a secondary weapon was fired
 void process_secondary_fired_packet(ubyte* data, header* hinfo, int from_player)
 {
-	mprintf(("we got a secondary fired packet.\n"));
 	int offset, allow_swarm, target_objnum_save;
 	ushort net_signature, starting_sig, target_net_signature;
 	ubyte sinfo, current_bank;
@@ -3395,6 +3394,8 @@ void process_mission_log_packet( ubyte *data, header *hinfo )
 	GET_INT(timestamp); // NOTE: this is a long so careful with swapping in 64-bit platforms - taylor
 	GET_STRING(pname);
 	GET_STRING(sname);
+
+	mprintf(("%s and sname %s \n", pname, sname));
 
 	PACKET_SET_SIZE();
 
@@ -7494,7 +7495,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 {
 	int packet_size, objnum;
 	ubyte data[MAX_PACKET_SIZE], flags = 0; // ubanks_fired, current_bank;
-	object* objp;
+	object* objp;	
 	int np_index;
 	net_player* ignore = NULL;
 
@@ -7648,8 +7649,8 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 	}
 	shipp = &Ships[objp->instance];
 
-	// if we're in client firing mode, ignore ones for myself
-	if ((Player_obj != NULL) && (Player_obj == objp)) {
+	// if we're in client firing mode, ignore ones for myself	
+	if((Player_obj != NULL) && (Player_obj == objp)){		
 		return;
 	}
 
@@ -7690,7 +7691,6 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 		objp_ref = multi_get_network_object(target_ref);
 
 		if (objp_ref == nullptr) {
-			mprintf(("packet failed beecause of nullptr\n"));
 			// new way failed, use the old new way.
 			if (secondary) {
 				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
@@ -7699,23 +7699,19 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 			} else { 
 				ship_fire_primary(objp, 0, 1);
 			}
-
-
 			return;
 		}
 		
+		// figure out correct start frame and wrap
 		ushort wrap = multi_ship_record_calculate_wrap(client_frame);
-
-		// figure out correct start frame and adjust the time elapsed
 		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
-		
+
 		if (frame > -1) {
 			// make sure that record we would access is from this ship!
 		//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
 		//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
 		//		return;
 		//	}	
-			int net_sig_idx = objp_ref->net_signature;
 
 			// adjust time so that we can interpolate the position and orientation that was seen on the client.
 			time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
@@ -7724,7 +7720,6 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
 			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
-
 			// find out where the angle to the new primary fire should be, by
 			// rotating the vector
 
@@ -7732,29 +7727,22 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 
 			// figure out the new position for the firing ship.
 			vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
-
 			// Finish finding the shot's starting position	
 			vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
-
 			// "decompress" the orientation matrix from the packet's angles.
 					vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
-					vm_orthogonalize_matrix(&adjust_ship_matrix);
+					//vm_orthogonalize_matrix(&adjust_ship_matrix);
 					vm_angles_2_matrix(&old_player_ori, &player_ship_angles);
-					vm_orthogonalize_matrix(&old_player_ori);
-
+					//vm_orthogonalize_matrix(&old_player_ori);
 			// Now multiply the two matrices for the orientation of the weapon.
 			vm_matrix_x_matrix(&new_ship_ori, &new_tar_ori, &adjust_ship_matrix);
-
 			vm_orthogonalize_matrix(&new_ship_ori);
-
 			vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
-
 			multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
-			mprintf(("New primary shot system Succeeded with frame %d\n", frame));
 
 		} else {
 		// if the new way fails for some reason, use the old way.
-			mprintf(("New primary shot system failed because frame was -1.\n"));
+			nprintf(("Network","Rollback was not performed because the frame sent by the client is either too old or invalid.. Using the old system.\n"));
 			if (secondary) {
 				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
 				// rollback shot so the client doesn't get an extra shot.
@@ -7780,11 +7768,11 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 	{
 		// Juke - this is the hackiest hack, but hopefully it will fix stream weapon 
 		// notifications generated by AI ships.
-		bool flags = shipp->flags[Ship::Ship_Flags::Trigger_down];
+		bool trigger_flags = shipp->flags[Ship::Ship_Flags::Trigger_down];
 
 		shipp->flags.set(Ship::Ship_Flags::Trigger_down);
 		ship_fire_primary( objp, 1, 1 );
-		shipp->flags.set(Ship::Ship_Flags::Trigger_down, flags);
+		shipp->flags.set(Ship::Ship_Flags::Trigger_down, trigger_flags);
 	}
 }
 

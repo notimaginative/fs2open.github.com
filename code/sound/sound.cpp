@@ -814,10 +814,6 @@ int snd_get_3d_vol_and_pan(game_snd *gs, vec3d *pos, float* vol, float *pan, flo
 	float min_range = (float) (fl2i( (gs->min) * range_factor));
 	float max_range = (float) ((int)std::lround((gs->max) * range_factor));
 
-	mprintf(("Tracing, pos is is %f %f %f \n", pos->xyz.x, pos->xyz.y, pos->xyz.z));
-	mprintf(("Tracing, view_pos is is %f %f %f \n", View_position.xyz.x, View_position.xyz.y, View_position.xyz.z));
-
-
 	distance = vm_vec_normalized_dir_quick( &vector_to_sound, pos, &View_position );
 	distance -= radius;
 

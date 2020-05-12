@@ -3742,7 +3742,6 @@ void multi_create_game_do()
 		// don't bother setting netgame state if ont the server
 		if(Net_player->flags & NETINFO_FLAG_AM_MASTER){
 			Netgame.game_state = NETGAME_STATE_FORMING;
-			mprintf(("MULTI_MADNESS build has decided to send the game update packet....\n"));
 			send_netgame_update_packet();
 		}	
 
@@ -8475,7 +8474,7 @@ void multi_sync_launch()
 	nprintf(("Network","# of players at start of mission : %d\n", Multi_num_players_at_start));
 	
 	// initialize datarate limiting for all clients
-	multi_oo_rate_init_all();
+	multi_oo_rate_init_all();	
 				
 	multi_common_add_text(XSTR("Sending mission start packet\n",843),1);				
 }

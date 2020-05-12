@@ -494,8 +494,6 @@ void multi_client_check_server()
 
 void process_packet_normal(ubyte* data, header *header_info)
 {
-
-	mprintf(("Received Packet Type #%d,\n", data[0]));
 	switch ( data[0] ) {
 
 		case JOIN:
@@ -1222,6 +1220,7 @@ void multi_do_frame()
 	// while in the mission, send my PlayerControls to the host so that he can process
 	// my movement
 	if ( Game_mode & GM_IN_MISSION ) {
+
 		if ( !(Net_player->flags & NETINFO_FLAG_AM_MASTER)){					
 			if(Net_player->flags & NETINFO_FLAG_OBSERVER){
 				// if the rate limiting system says its ok
@@ -1230,11 +1229,8 @@ void multi_do_frame()
 					send_observer_update_packet();
 				}
 			} else if ( !(Player_ship->is_departing() ) ){
-				// if the rate limiting system says its ok
-//				if(multi_oo_cirate_can_send()){
-					// use the new method
-					multi_oo_send_control_info(); // Cyborg17 - Don't limit players updating themselves.
-//				}				
+					// use the new method -- Cyborg17 - Don't limit players updating themselves to the server.
+					multi_oo_send_control_info(); 
 			}
 
 			// bytes received info
@@ -1305,7 +1301,7 @@ void multi_do_frame()
 	// process any tracker messages
 	multi_fs_tracker_process();
 
-	// Cyborg17 update the new frame recording system for accurate client shots, needs to go after most everything else in multi.
+	// Cyborg17 update pos/ori/vel recording system for accurate client shots, needs to go after most everything else in multi for accuracy
 	if (Game_mode & GM_IN_MISSION) {
 		multi_ship_record_increment_frame();
 	}

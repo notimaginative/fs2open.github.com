@@ -28,7 +28,7 @@ struct server_item;
 class ship_info;
 class p_object;
 
-// two types of signatures that we can request,  permanent signatures are all below 5000.  non-permanent are above 5000
+// two types of signatures that we can request,  permanent signatures are all below 8000.  non-permanent are above 8000
 #define MULTI_SIG_SHIP					1
 #define MULTI_SIG_ASTEROID				2
 #define MULTI_SIG_NON_PERMANENT		3
@@ -199,6 +199,9 @@ int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, vec3d *pos, ph
 // Packs/unpacks rotational velocity
 // Returns number of bytes read or written.
 int multi_pack_unpack_rotvel(int write, ubyte *data, physics_info *pi);
+
+// Cyborg17 - Packs/unpacks desired velocity and rotational velocity.
+ubyte multi_pack_unpack_desired_vel_and_desired_rotvel(int write, ubyte* data, physics_info* pi, vec3d local_desired_vel);
 
 char multi_unit_to_char(float unit);
 float multi_char_to_unit(float val);

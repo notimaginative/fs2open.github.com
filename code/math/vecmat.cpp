@@ -2887,8 +2887,7 @@ vec4 vm_vec3_to_ve4(const vec3d& vec, float w) {
 
 // Cyborg17 - Rotational interpolation between two angle structs in radians.  Assumes that the rotation direction is the smaller arc difference.
 // src0 is the starting angle struct, src1 is the ending angle struct, interp_perc must be a float between 0.0f and 1.0f inclusive.
-// rot_vel is only used to determine the rotation direction. This functions assumes a <= 2PI rotation in any axis.  
-// You will get inaccurate results otherwise.
+// This functions assumes a <= 2PI rotation in any axis. You will get inaccurate results otherwise.
 void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, float interp_perc) {
 	
 	Assertion((interp_perc >= 0.0f) && (interp_perc <= 1.0f), "Interpolation percentage, %f, sent to vm_interpolate_angles is invalid. The valid range is [0,1], go find a coder!", interp_perc);
@@ -2904,13 +2903,13 @@ void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, floa
 	  // if start and end are basically the same, assume we can basically jump to the end.
 	if ( (fabs(arc_measures.p) < 0.00001f) ) {
 			arc_measures.p = 0.0f;
+
 	} // Test for positive difference
 	else if (arc_measures.p > 0.0f)  {
 
 		// do we actually need to go in the other direction
 		if (arc_measures.p > (PI*1.5f)) {
 			arc_measures.p = PI2 - arc_measures.p;
-
 		}
 
 	} // Negative difference then.
@@ -2927,13 +2926,13 @@ void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, floa
 	// if start and end are basically the same, assume we can basically jump to the end.
 	if ( (fabs(arc_measures.h) < 0.00001f) ) {
 		arc_measures.h = 0.0f;
+
 	} // Test for positive difference
 	else if (arc_measures.h > 0.0f)  {
 
 		// do we actually need to go in the other direction
 		if (arc_measures.h > (PI*1.5f)) {
 			arc_measures.h = PI2 - arc_measures.h;
-
 		}
 
 	} // Negative difference then.
@@ -2942,7 +2941,6 @@ void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, floa
 		// do we actually need to go in the other direction
 		if (arc_measures.h < -PI_2) {
 			arc_measures.h = -PI2 - arc_measures.h;
-
 		}
 	}
 
@@ -2950,13 +2948,13 @@ void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, floa
 	// if start and end are basically the same, assume we can basically jump to the end.
 	if ( (fabs(arc_measures.b) < 0.00001f) ) {
 		arc_measures.b = 0.0f;
+
 	} // Test for positive difference
 	else if (arc_measures.b > 0.0f)  {
 
 		// do we actually need to go in the other direction
 		if (arc_measures.b > (PI*1.5f)) {
 			arc_measures.b = PI2 - arc_measures.b;
-
 		}
 
 	} // Negative difference then.
@@ -2965,7 +2963,6 @@ void vm_interpolate_angles_quick(angles *dest0, angles *src0, angles *src1, floa
 		// do we actually need to go in the other direction
 		if (arc_measures.b < -PI_2) {
 			arc_measures.b = -PI2 - arc_measures.b;
-
 		}
 	}
 

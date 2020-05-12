@@ -620,7 +620,7 @@ void obj_delete(int objnum)
 		} else {
 			// we need to be able to delete GHOST objects in multiplayer to allow for player respawns.
 			nprintf(("Network","Deleting GHOST object\n"));
-			objp->net_signature = 0;
+			objp->net_signature = 0; // Cyborg17 Setitng net_signature to 0 allows the multi ship tracker to work safely.
 		}		
 		break;
 	case OBJ_OBSERVER:
@@ -1585,7 +1585,7 @@ void obj_move_all(float frametime)
 	// do post-collision stuff for beam weapons
 	beam_move_all_post();
 
-	// Cyborg17 - Update the multi record on multi with these new positions. Clients need to get updated, too.
+	// Cyborg17 - Update the multi record on multi with these new positions.
 	if (MULTIPLAYER_MASTER) {
 		multi_ship_record_update_all();
 	}

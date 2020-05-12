@@ -3433,10 +3433,9 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 	// for multiplayer, assign a network signature to this parse object.  Doing this here will
 	// allow servers to use the signature with clients when creating new ships, instead of having
 	// to pass ship names all the time
-	if (Game_mode & GM_MULTIPLAYER) {
+	if (Game_mode & GM_MULTIPLAYER)
 		p_objp->net_signature = multi_assign_network_signature(MULTI_SIG_SHIP);
-	}
-	
+
 	// set the wing_status position to be -1 for all objects.  This will get set to an appropriate
 	// value when the wing positions are finally determined.
 	p_objp->wing_status_wing_index = -1;
