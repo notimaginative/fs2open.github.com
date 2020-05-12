@@ -11390,7 +11390,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 							shipp->last_fired_point[bank_to_fire] = (shipp->last_fired_point[bank_to_fire] + 1) % num_slots;				
 
 							// maybe add this weapon to the list of those we need to roll forward
-							if ((Game_mode & GM_MULTIPLAYER) && rollback_shot) {
+							if ((Game_mode & (GM_MULTIPLAYER | GM_STANDALONE_SERVER )) && rollback_shot) {
 								multi_ship_record_add_rollback_wep(weapon_objnum);
 							}
 						}
@@ -12106,7 +12106,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 				swp->last_fired_weapon_signature = Objects[weapon_num].signature;
 
 				// possibly add this to the rollback vector
-				if ((Game_mode & GM_MULTIPLAYER) && rollback_shot){
+				if ((Game_mode & (GM_MULTIPLAYER | GM_STANDALONE_SERVER)) && rollback_shot){
 					multi_ship_record_add_rollback_wep(weapon_num);
 				}
 

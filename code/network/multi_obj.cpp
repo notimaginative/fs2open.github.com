@@ -470,7 +470,7 @@ ushort multi_ship_record_calculate_wrap(ushort combined_frame)
 
 // Finds the first frame that is before the incoming timestamp.
 int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed)
-{
+{	
 	// unpack the wrap and frame from the client packet
 	int frame = client_frame % MAX_FRAMES_RECORDED;
 	bool same_wrap = false;
@@ -480,17 +480,18 @@ int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elap
 	// easy case, client is reasonably up to date, so just return the frame.
 	if (wrap == Oo_info.wrap_count) {
 		same_wrap = true;
-
 	}	// somewhat out of date but still salvagable case.
 	else if (wrap == (Oo_info.wrap_count - 1)) {
+
 		// but we can't use it if it would index to info in the current wrap instead of the previous wrap.
-		if (frame >= Oo_info.cur_frame_index) {
+		if (frame <= Oo_info.cur_frame_index) {
 			return -1;
 		}
 
 		// Just in case the larger wrap just happened....
-	} else if (wrap == MAX_SERVER_TRACKER_SMALL_WRAPS && Oo_info.wrap_count == 0){
-		if (frame >= Oo_info.cur_frame_index) {
+	} else if ((wrap == MAX_SERVER_TRACKER_SMALL_WRAPS - 1) && Oo_info.wrap_count == 0){
+
+		if (frame <= Oo_info.cur_frame_index) {
 			return -1;
 		}
 
@@ -504,7 +505,7 @@ int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elap
 		return frame;
 	}
 
-	// Otherwise, look for the frame that the client is saying to look for.  If we hit the frame the client sent, abort.
+	// Otherwise, look for the frame that the client is saying to look for.  If we hit the frame the client sent, return.
 	for (int i = Oo_info.cur_frame_index - 1; i > -1; i--) {
 
 		// Check to see if the client's timestamp matches the recorded frames.
@@ -516,7 +517,7 @@ int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elap
 		}
 	}
 
-	// Check for the wrap.
+	// Check for an end of the wrap condition.
 	if ((Oo_info.timestamps[MAX_FRAMES_RECORDED - 1] <= target_timestamp) && (Oo_info.timestamps[0] > target_timestamp)) {
 		return MAX_FRAMES_RECORDED - 1;
 	}
@@ -636,12 +637,12 @@ void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orie
 
 // Manage rollback for a frame
 void multi_ship_record_do_rollback() {
-
+	
 	// only rollback if there are shots to simulate.
 	if (!Oo_info.rollback_mode) {
 		return;
 	}
-
+	mprintf(("roll back is running"));
 	int net_sig_idx;
 	object* objp;
 
@@ -692,7 +693,7 @@ void multi_ship_record_do_rollback() {
 	if (frame_idx == MAX_FRAMES_RECORDED) {
 		frame_idx = 0;
 	}
-	mprintf(("\n\nrollback loops start here:\n"));
+
 	while (frame_idx != Oo_info.cur_frame_index) {
 		if (Oo_info.rollback_shots[frame_idx].size() > 0) {
 			break;
@@ -730,6 +731,7 @@ void multi_ship_record_do_rollback() {
 	// restore the old frame
 	multi_record_restore_positions();
 
+	// clean up the old info
 	Oo_info.rollback_collide_list.clear();
 	Oo_info.rollback_cur_frame = MAX_FRAMES_RECORDED;
 	Oo_info.rollback_mode = false;
@@ -738,9 +740,8 @@ void multi_ship_record_do_rollback() {
 		Oo_info.rollback_shots[i].clear();
 	}
 	for (auto temp_wobjp : Oo_info.rollback_wobjp) {
-		float bob = vm_vec_dist_squared(&temp_wobjp->pos, &Objects[temp_wobjp->parent].pos);
 
-		mprintf(("%f ", bob));
+		float bob = vm_vec_dist_squared(&temp_wobjp->pos, &Objects[temp_wobjp->parent].pos);
 	}
 	mprintf(("\n"));
 
@@ -750,9 +751,7 @@ void multi_ship_record_do_rollback() {
 // fires the rollback weapons that are in the rollback struct
 void multi_oo_fire_rollback_shots(int frame_idx){
 	mprintf(("I'm the last one to run! 51\n"));
-	int old_size = (int)Oo_info.rollback_wobjp.size();
 
-	mprintf(("Number of weapons we have to create: %d\n", (int)Oo_info.rollback_shots[frame_idx].size()));
 	for (auto rollback_shot = Oo_info.rollback_shots[frame_idx].begin(); rollback_shot != Oo_info.rollback_shots[frame_idx].end(); rollback_shot++) {
 		rollback_shot->shooterp->pos = rollback_shot->pos;
 		rollback_shot->shooterp->orient = rollback_shot->orient;
@@ -769,8 +768,7 @@ void multi_oo_fire_rollback_shots(int frame_idx){
 	int new_size = (int)Oo_info.rollback_wobjp.size();
 
 	// add the newly created shots to the collision list.
-	for (int i = old_size; i < new_size; i++) {
-		auto wobjp = Oo_info.rollback_wobjp[i];
+	for (auto & wobjp : Oo_info.rollback_wobjp) {
 
 		Assertion(wobjp != nullptr, "Somehow FSO added a nullptr to a list of weapons it is supposed to rollback.");
 		Oo_info.rollback_collide_list.push_back(OBJ_INDEX(wobjp));
@@ -821,10 +819,7 @@ void multi_record_restore_positions() {
 		objp->phys_info.vel = restore_point.velocity;
 	}
 
-	Oo_info.rollback_wobjp.clear();
 	Oo_info.restore_points.clear();
-
-
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -2266,11 +2261,14 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 
 	float temp_max = shield_get_max_quad(obj);
 	bool all_max = true;
-	// maybe update shields, which are constantly repairing, and should be regularly updated, unless they are already spotless.
-	for (auto quadrant : obj->shield_quadrant) {
-		if (quadrant != temp_max) {
-			all_max = false;
-			break;
+	// Client and server deal with ship death differently, so sending this info for dead ships can cause bugs
+	if (!(shipp->is_dying_or_departing() || shipp->flags[Ship::Ship_Flags::Exploded])) {
+		// maybe update shields, which are constantly repairing, and should be regularly updated, unless they are already spotless.
+		for (auto quadrant : obj->shield_quadrant) {
+			if (quadrant != temp_max) {
+				all_max = false;
+				break;
+			}
 		}
 	}
 
