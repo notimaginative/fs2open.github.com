@@ -3158,17 +3158,14 @@ void multi_oo_interp(object* objp)
 			// exactly on the middle point, save some time and just put the ship on that orientation.
 			if (time_factor == 2.0f) {
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_a);
-				vm_orthogonalize_matrix(&objp->orient);
 				objp->phys_info.vel = interp_data->anticipated_velocity1;
 			} // Same for being exactly on the end point
 			else if (time_factor == 3.0f) {
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_b);
-				vm_orthogonalize_matrix(&objp->orient);
 				objp->phys_info.vel = interp_data->anticipated_velocity2;
 			}
 			else if (time_factor == 4.0f) {
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_c);
-				vm_orthogonalize_matrix(&objp->orient);
 				objp->phys_info.vel = interp_data->anticipated_velocity3;
 
 			} // in case we have to do our interpolation. We cannot do anything if it's less than 1 because those are actually old values that *should* never happen.
@@ -3203,7 +3200,6 @@ void multi_oo_interp(object* objp)
 
 				vm_interpolate_angles_quick(&temp_angles, &old_angles, &new_angles, time_factor);
 				vm_angles_2_matrix(&objp->orient, &temp_angles);
-				vm_orthogonalize_matrix(&objp->orient);
 
 				vec3d temp_vec;
 				vm_vec_sub(&temp_vec, &new_velocity, &old_velocity);
