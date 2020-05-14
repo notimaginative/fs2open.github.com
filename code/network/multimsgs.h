@@ -536,8 +536,4 @@ void process_self_destruct_packet(ubyte *data, header *hinfo);
 void send_sexp_packet(ubyte *sexp_packet, int num_ubytes);
 void process_sexp_packet(ubyte *data, header *hinfo);
 
-// Cyborg17 - TODO: help sync the client to the server by sending the timestamps of all frames.
-void send_frame_timestamp_packet();
-void process_frame_timestamp_packet(ubyte *data, header *hinfo);
-
 #endif
