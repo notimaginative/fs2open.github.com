@@ -27,14 +27,12 @@ struct weapon;
 
 
 // client button info flags
-#define OOC_FIRE_SECONDARY			(1<<0)
-#define OOC_TARGET_LOCKED			(1<<1)
-#define OOC_TARGET_SEEK_LOCK		(1<<2)
-#define OOC_LOCKING_ON_CENTER		(1<<3)
-#define OOC_TRIGGER_DOWN			(1<<4)
-#define OOC_PRIMARY_BANK			(1<<5)
-#define OOC_PRIMARY_LINKED			(1<<6)
-#define OOC_AFTERBURNER_ON			(1<<7)
+#define OOC_FIRE_CONTROL_PRESSED			(1<<0)
+#define OOC_TARGET_SEEK_LOCK		(1<<1)
+#define OOC_TRIGGER_DOWN			(1<<2)
+#define OOC_PRIMARY_BANK			(1<<3)
+#define OOC_PRIMARY_LINKED			(1<<4)
+#define OOC_AFTERBURNER_ON			(1<<5)
 // NOTE: no additional flags here unless it's sent in an extra data byte
 
 // Cyborg17, Server will be tracking only the last second of frames

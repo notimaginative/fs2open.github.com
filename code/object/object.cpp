@@ -769,7 +769,7 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 			// Cyborg17, this is where the inaccurate multi shots are being shot... 
 			// so let's let the new system take over instead by excluding client player shots
 			// on the server.
-			if (!(MULTIPLAYER_MASTER) || !(objp->signature == Net_players[0].m_player->objnum)) {
+			if (!(MULTIPLAYER_MASTER) || (objp == Player_obj)) {
 				ship_fire_primary(objp, 0);
 			}
 			
@@ -790,7 +790,8 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 	if ( !MULTIPLAYER_CLIENT 
 		// Cyborg17 - except clients now fire dumbfires for rollback on the server
 		|| !(Weapon_info[shipp->weapons.secondary_bank_weapons[shipp->weapons.current_secondary_bank]].is_homing())) {		
-		if ( ci.fire_secondary_count ) {
+		if (ci.fire_secondary_count) {
+
    			if ( !ship_start_secondary_fire(objp) ) {
 				ship_fire_secondary( objp );
 			}
@@ -802,6 +803,16 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 				ship_fire_secondary( objp );
 			}
 		}
+	}
+
+	if ( MULTIPLAYER_CLIENT && objp == Player_obj ) {
+		if (Weapon_info[shipp->weapons.secondary_bank_weapons[shipp->weapons.current_secondary_bank]].trigger_lock) {
+			if (ci.fire_secondary_count) {
+				ship_start_secondary_fire(objp);
+			} else {
+				ship_stop_secondary_fire(objp);
+			}
+		}	
 	}
 
 	// everyone does the following for their own ships.

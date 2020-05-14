@@ -11885,19 +11885,23 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 	{
 		if (!ship_is_tagged(&Objects[aip->target_objnum]))
 		{
-			if (obj==Player_obj)
+			if (obj==Player_obj || (MULTIPLAYER_MASTER && obj->flags[Object::Object_Flags::Player_ship]))
 			{
 				if ( !Weapon_energy_cheat )
 				{
 					HUD_sourced_printf(HUD_SOURCE_HIDDEN, NOX("Cannot fire %s if target is not tagged"),wip->get_display_string());
 					snd_play( gamesnd_get_game_sound(ship_get_sound(Player_obj, GameSounds::OUT_OF_MISSLES)) );
 					swp->next_secondary_fire_stamp[bank] = timestamp(800);	// to avoid repeating messages
+
+					if (MULTIPLAYER_MASTER && obj != Player_obj && obj->flags[Object::Object_Flags::Player_ship]) {
+						mprintf(("Hit return at 11949\n"));
+					}
 					return 0;
 				}
 			}
 			else
 			{
-				if ( !MULTIPLAYER_CLIENT )
+				if ( !MULTIPLAYER_CLIENT ) 
 				{
 					return 0;
 				}
@@ -11905,14 +11909,14 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 		}
 	}
 
-	if ( !allow_swarm && obj == Player_obj ) {
+	if ( !allow_swarm && ( obj == Player_obj || (MULTIPLAYER_MASTER && obj->flags[Object::Object_Flags::Player_ship] ) ) ) {
 		ship_queue_missile_locks(shipp);
 	}
 
 	// if trying to fire a swarm missile, make sure being called from right place
 	if ( (wip->wi_flags[Weapon::Info_Flags::Swarm]) && !allow_swarm ) {
 		Assert(wip->swarm_count > 0);
-		if (wip->multi_lock && obj == Player_obj) {
+		if (wip->multi_lock && (obj == Player_obj || (MULTIPLAYER_MASTER && obj->flags[Object::Object_Flags::Player_ship]) )) {
 			shipp->num_swarm_missiles_to_fire = (int)shipp->missile_locks_firing.size();
 		} else if(wip->swarm_count <= 0){
 			shipp->num_swarm_missiles_to_fire = SWARM_DEFAULT_NUM_MISSILES_FIRED;
@@ -11928,7 +11932,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 	if ( (wip->wi_flags[Weapon::Info_Flags::Corkscrew]) && !allow_swarm ) {
 		//phreak 11-9-02 
 		//changed this from 4 to custom number defined in tables
-		if (wip->multi_lock && obj == Player_obj) {
+		if (wip->multi_lock && (obj == Player_obj || (MULTIPLAYER_MASTER && obj->flags[Object::Object_Flags::Player_ship]) )) {
 			shipp->num_corkscrew_to_fire = (ubyte)shipp->missile_locks_firing.size();
 		} else {
 			shipp->num_corkscrew_to_fire = (ubyte)(shipp->num_corkscrew_to_fire + (ubyte)wip->cs_num_fired);
@@ -11979,7 +11983,7 @@ int ship_fire_secondary( object *obj, int allow_swarm, bool rollback_shot )
 		ship_subsys *target_subsys;
 		int locked;
 
-		if ( obj == Player_obj ) {
+		if ( obj == Player_obj || obj->flags[Object::Object_Flags::Player_ship]) {
 			// use missile lock slots
 			if ( shipp->missile_locks_firing.size() > 0 ) {
 				lock_info lock_data = shipp->missile_locks_firing.back();
@@ -12188,7 +12192,7 @@ done_secondary:
 			send_secondary_fired_packet( shipp, starting_sig, starting_bank_count, num_fired, allow_swarm );			
 		}
 
-		// STATS -- And client side dumbfire secondary firing.
+		// Handle Player only stuff, including stats and client secondary packets
 		if (obj->flags[Object::Object_Flags::Player_ship]) {
 			// in multiplayer -- only the server needs to keep track of the stats.  Call the cool
 			// function to find the player given the object *.  It had better return a valid player

@@ -187,6 +187,10 @@ oo_general_info Oo_info;
 // flags
 bool Afterburn_hack = false;			// HACK!!!
 
+// for multilock
+#define OOC_INDEX_NULLPTR_SUBSYSEM			255			// If a lock has a nullptr subsystem, send this as the invalid index.
+#define OOC_MAX_LOCKS							375			// Because of limited packet size, this is approximately the safe maximum of locks. 
+
 void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info);
 
 // how much data we're willing to put into a given oo packet
@@ -1074,9 +1078,10 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 	ushort tnet_signature;
 	char t_subsys, l_subsys;
 	int packet_size = 0;
+	bool homing_secondary_firing = true;
 
-	// get our firing stuff Cyborg17 - This line is only for secondary fire, not other controls
-	// And we are not going to send dumbfire missiles here.  Much better to send via non homing weapons packet through ship_fire_secondary()
+	// get our firing stuff Cyborg17 - This line is only for secondary fire, not other controls, and we are not going 
+	// to send firing dumbfire missiles here.  Better to send via non homing weapons packet through ship_fire_secondary()
 	if ( Weapon_info[shipp->weapons.secondary_bank_weapons[shipp->weapons.current_secondary_bank]].is_homing() ) {
 		out_flags = Net_player->s_info.accum_buttons;	
 	} else {
@@ -1087,14 +1092,8 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 	Net_player->s_info.accum_buttons = 0;
 
 	// add any necessary targeting flags
-	if ( Player_ai->current_target_is_locked ){
-		out_flags |= OOC_TARGET_LOCKED;
-	}
 	if ( Player_ai->ai_flags[AI::AI_Flags::Seek_lock] ){	
 		out_flags |= OOC_TARGET_SEEK_LOCK;
-	}
-	if ( Player->locking_on_center ){
-		out_flags |= OOC_LOCKING_ON_CENTER;
 	}
 	if ( (Player_ship != nullptr) && (Player_ship->flags[Ship::Ship_Flags::Trigger_down]) ){
 		out_flags |= OOC_TRIGGER_DOWN;
@@ -1147,6 +1146,40 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 	ADD_USHORT( tnet_signature );
 	ADD_DATA( t_subsys );
 	ADD_DATA( l_subsys );
+	
+	// multilock object update patch
+	ushort count = 0;
+	SCP_vector<ushort> lock_list;
+	SCP_vector<ubyte> subsystems;
+
+	// look for locked slots
+	for (auto & lock : shipp->missile_locks) {
+		if (lock.locked) {
+			lock_list.push_back(lock.obj->net_signature);
+			// if the subsystem is a nullptr within the lock, send nullptr to the server.
+			if (lock.subsys == nullptr) {
+				subsystems.push_back(OOC_INDEX_NULLPTR_SUBSYSEM);
+			} // otherwise, just send the subsystem index.
+			else {
+				subsystems.push_back( (ubyte)std::distance( GET_FIRST(&Ships[lock.obj->instance].subsys_list), lock.subsys) );
+			}
+				
+			count++;
+
+			// Quit looking if we're at the maximum.
+			if (count >= OOC_MAX_LOCKS) {
+				break;
+			}
+		}
+	}
+
+	// add the data we just found, in the correct order. (so the simulation will be as exact as possible)
+	ADD_DATA(count);
+
+	for (int i = 0; i < lock_list.size(); i++) {
+		ADD_USHORT(lock_list[i]);
+		ADD_DATA(subsystems[i]);
+	}
 
 	return packet_size;
 }
@@ -1274,7 +1307,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		multi_rate_add(NET_PLAYER_NUM(pl), "ori", ret);		
 		ret = 0;
 
-		// in order to send only the correct data we must rotate the global velocity into local coordinates
+		// in order to send data by axis we must rotate the global velocity into local coordinates
 		vec3d local_desired_vel;
 
 		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient);
@@ -1358,6 +1391,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 			for (int j = 0; j < count; j++) {
 				PACK_BYTE(flagged_subsystem_list[j]);
 				PACK_PERCENT(subsystem_list_health[j]);
+				Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[j] = subsystem_list_health[j];
 			}
 		}
 	}
@@ -1447,7 +1481,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 }
 
 // unpack information for a client , return bytes processed
-int multi_oo_unpack_client_data(net_player *pl, ubyte *data)
+int multi_oo_unpack_client_data(net_player *pl, ubyte *data, ushort seq_num)
 {
 	ushort in_flags;
 	ship *shipp = nullptr;
@@ -1473,21 +1507,15 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data)
 
 		// secondary fired
 		pl->m_player->ci.fire_secondary_count = 0;
-		if ( in_flags & OOC_FIRE_SECONDARY ){
+		if ( in_flags & OOC_FIRE_CONTROL_PRESSED ){
 			pl->m_player->ci.fire_secondary_count = 1;
 		}
 
 		// countermeasure fired		
 		pl->m_player->ci.fire_countermeasure_count = 0;		
 
-		// set up aspect locking information
-		pl->m_player->locking_on_center = 0;
-		if ( in_flags & OOC_LOCKING_ON_CENTER ){
-			pl->m_player->locking_on_center = 1;
-		}		
-
-		// trigger down, bank info
-		if(shipp != nullptr){
+		// trigger down, bank info, only apply if this is the most recent packet.
+		if(shipp != nullptr && seq_num == Oo_info.interp[objp->net_signature].most_recent_packet){
 			if(in_flags & OOC_TRIGGER_DOWN){
 				shipp->flags.set(Ship::Ship_Flags::Trigger_down);
 			} else {
@@ -1509,7 +1537,6 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data)
 
 		// other locking information
 		if((shipp != nullptr) && (shipp->ai_index != -1)){			
-			Ai_info[shipp->ai_index].current_target_is_locked = ( in_flags & OOC_TARGET_LOCKED) ? 1 : 0;
 			Ai_info[shipp->ai_index].ai_flags.set(AI::AI_Flags::Seek_lock, (in_flags & OOC_TARGET_SEEK_LOCK) != 0);
 		}
 
@@ -1556,7 +1583,65 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data)
 				pl->m_player->locking_subsys = ship_get_indexed_subsys( &Ships[tobj->instance], l_subsys);
 			}				
 		}
-	}				
+	}
+
+	// Cyborg17 - this section allows multilock to work in multiplayer.
+	ushort count;
+
+	// Get how many locks were in the packet.
+	GET_USHORT(count);
+
+	// Only use the most up to date info.
+	if (seq_num == Oo_info.interp[objp->net_signature].most_recent_packet) {
+
+		lock_info temp_lock_info;
+		ship_clear_lock(&temp_lock_info);
+		temp_lock_info.locked = true;
+
+		ushort multilock_target_net_signature;
+		ubyte subsystem_index;
+
+		// clear whatever we had before, because we're getting brand new info straight from the client.
+		if (shipp != nullptr) {
+			shipp->missile_locks.clear();
+		}
+
+		// add each lock, one at a time.
+		for (int i = 0; i < count; i++) {
+			GET_USHORT(multilock_target_net_signature);
+			GET_DATA(subsystem_index);
+			temp_lock_info.obj = multi_get_network_object(multilock_target_net_signature);
+
+			if (temp_lock_info.obj != nullptr && shipp != nullptr) {
+				// look up 
+				if (subsystem_index != OOC_INDEX_NULLPTR_SUBSYSEM) {
+					ship_subsys* ml_target_subsysp = GET_FIRST(&Ships[temp_lock_info.obj->instance].subsys_list);
+					for (int j = 0; j < subsystem_index; j++) {
+						ml_target_subsysp = GET_NEXT(ml_target_subsysp);
+					}
+
+					temp_lock_info.subsys = ml_target_subsysp;
+
+				}
+				else {
+					temp_lock_info.subsys = nullptr;
+				}
+
+
+				if (seq_num == Oo_info.interp[objp->net_signature].most_recent_packet) {
+					shipp->missile_locks.push_back(temp_lock_info);
+				}
+			}
+			else if (shipp != nullptr) {
+				if (seq_num == Oo_info.interp[objp->net_signature].most_recent_packet) {
+					shipp->missile_locks.push_back(temp_lock_info);
+				}
+			}
+		}
+	} // if this was not the most up to date info, skip this info.
+	else {
+		offset += (count * 3);
+	}
 
 	return offset;
 }
@@ -1593,9 +1678,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	GET_USHORT(oo_flags);
 	GET_DATA(data_size);
 	GET_USHORT(seq_num);
-
-	mprintf(("packet foo! seq num: %d, oo_flags: %d, data size: %d, ", oo_flags, data_size, seq_num));
-
+	
 	if (MULTIPLAYER_MASTER) {
 		// client cannot send these types because the server is in charge of all of these things.
 		// TODO: Consider changing this to the booting the player that the request came from.
@@ -1722,7 +1805,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 	// if this is from a player, read his button info
 	if(MULTIPLAYER_MASTER){
-		int r0 = multi_oo_unpack_client_data(pl, data + offset);		
+		int r0 = multi_oo_unpack_client_data(pl, data + offset, seq_num);		
 		pos_and_time_data_size += r0;
 		offset += r0;
 	}
@@ -1930,8 +2013,8 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 				UNPACK_PERCENT(fpct);
 			}
 		}
-
 	}
+
 
 	if (oo_flags & OO_SUBSYSTEMS_NEW) {
 		ubyte n_subsystems, subsys_count = 0;
@@ -1976,6 +2059,15 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 			// retrieve the next subsystem
 			GET_DATA(current_subsystem);
+		}
+
+		// if not all were found in the loop because of mismatched tables or other bugs, unpack the rest and ignore them to ensure aligned packets
+		if (subsys_count < n_subsystems) {
+			do {
+				GET_DATA(current_subsystem);
+				UNPACK_PERCENT(current_percent);
+				subsys_count++;
+			} while (subsys_count < n_subsystems);
 		}
 
 		// recalculate all ship subsystems
