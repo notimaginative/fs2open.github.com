@@ -161,7 +161,6 @@ struct oo_general_info{
 	short larger_wrap_count;
 	ubyte cur_frame_index;									// the current frame index (to access most of the temporarily recorded info)
 
-	ubyte frame_timestamp_count;							// counts the number of times the timestamp has been sent to the client. 
 	int timestamps[MAX_FRAMES_RECORDED];					// The timestamp for the given frame
 	SCP_vector<oo_ship_position_records> frame_info;		// Actually keeps track of ship physics info on the server.  Uses net_signature as its index.
 	SCP_vector<oo_netplayer_records> player_frame_info;		// keeps track of player targets and what has been sent to each player. Uses player as the index
@@ -453,7 +452,6 @@ void multi_ship_record_increment_frame()
 
 	Oo_info.timestamps[Oo_info.cur_frame_index] = timestamp();
 	// reset the number of times we've sent the timestamp to the client.
-	Oo_info.frame_timestamp_count = 0;
 }
 
 // returns the last frame's index.
@@ -1237,24 +1235,21 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		header_bytes = 5;
 	}	
 
-	// Send the timestamp to the client to help the client sync more cleanly to the server up to 5 times per frame.
-	if (Oo_info.frame_timestamp_count < 3) {
+	// for now, just always send the timestamp since we depend on it a lot
+	oo_flags |= OO_TIMESTAMP;
+	ushort temp_timestamp = Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()];
 
-		oo_flags |= OO_TIMESTAMP;
-		ushort temp_timestamp = Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()];
-
-		// only the very longest frames are going to have greater than 255 ms, so cap it at that.
-		if (temp_timestamp > 255) {
-			temp_timestamp = 255;
-		}
-		ubyte timestamp_out = (ubyte)temp_timestamp;
-		PACK_BYTE(timestamp_out);
-		Oo_info.frame_timestamp_count++;
+	// only the very longest frames are going to have greater than 255 ms, so cap it at that.
+	if (temp_timestamp > 255) {
+		temp_timestamp = 255;
+	}
+	ubyte timestamp_out = (ubyte)temp_timestamp;
+	PACK_BYTE(timestamp_out);
 //		mprintf(("Packet foo: Timestamp is %d\n", temp_timestamp));
 
-		// putting this in the position bucket because it's mainly to help with position interpolation
-		multi_rate_add(NET_PLAYER_NUM(pl), "pos", 1);
-	}
+	// putting this in the position bucket because it's mainly to help with position interpolation
+	multi_rate_add(NET_PLAYER_NUM(pl), "pos", 1);
+
 
 	// if we're a client (and therefore sending control info), pack client-specific info
 	if((Net_player != nullptr) && !(Net_player->flags & NETINFO_FLAG_AM_MASTER)){
@@ -2584,7 +2579,6 @@ void multi_init_oo_and_ship_tracker()
 	Oo_info.wrap_count = 0;
 	Oo_info.larger_wrap_count = 0;
 	Oo_info.cur_frame_index = 0;
-	Oo_info.frame_timestamp_count = 0;
 	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
 		Oo_info.timestamps[i] = MAX_TIME; // This needs to be Max time (or at least some absurdly high number) for rollback to work correctly
 	}
