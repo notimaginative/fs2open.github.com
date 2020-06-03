@@ -1075,7 +1075,7 @@ int collide_ship_ship( obj_pair * pair )
 	Assert( B->type == OBJ_SHIP );
 
 	// Cyborg17 - no ship-ship collisions when doing multiplayer rollback
-	if ( (Game_mode & GM_MULTIPLAYER) && multi_ship_record_get_rollback_wep_mode ) {
+	if ( (Game_mode & GM_MULTIPLAYER) && multi_ship_record_get_rollback_wep_mode() ) {
 		return 0;
 	}
 
