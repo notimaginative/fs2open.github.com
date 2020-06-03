@@ -382,7 +382,6 @@ void multi_ship_record_add_ship(int obj_num)
 // Server Only
 void multi_ship_record_update_all() 
 {
-//	mprintf(("I'm the last one to run! 3\n"));
 	Assertion(MULTIPLAYER_MASTER, "Non-server accessed a server only function. Please report!!");
 
 	if (!MULTIPLAYER_MASTER) {
@@ -456,7 +455,6 @@ void multi_ship_record_increment_frame()
 
 // returns the last frame's index.
 int multi_find_prev_frame_idx() {
-	//mprintf(("I'm the last one to run! 5\n"));
 	if (Oo_info.cur_frame_index == 0) {
 		return MAX_FRAMES_RECORDED - 1;
 	} else {
@@ -644,11 +642,9 @@ void multi_ship_record_do_rollback() {
 	if (!Oo_info.rollback_mode) {
 		return;
 	}
-	mprintf(("roll back is running"));
+	nprintf(("Network","A multiplayer rollback shot is being simulated.\n"));
 	int net_sig_idx;
 	object* objp;
-
-	int frame = Oo_info.rollback_cur_frame;
 
 	// set up all restore points and ship portion of the collision list
 	for (ship& cur_ship : Ships) {
@@ -752,8 +748,6 @@ void multi_ship_record_do_rollback() {
 
 // fires the rollback weapons that are in the rollback struct
 void multi_oo_fire_rollback_shots(int frame_idx){
-	mprintf(("I'm the last one to run! 51\n"));
-
 	for (auto rollback_shot = Oo_info.rollback_shots[frame_idx].begin(); rollback_shot != Oo_info.rollback_shots[frame_idx].end(); rollback_shot++) {
 		rollback_shot->shooterp->pos = rollback_shot->pos;
 		rollback_shot->shooterp->orient = rollback_shot->orient;
@@ -766,8 +760,6 @@ void multi_oo_fire_rollback_shots(int frame_idx){
 			ship_fire_primary(rollback_shot->shooterp, 0, 1, true);
 		}
 	}
-
-	int new_size = (int)Oo_info.rollback_wobjp.size();
 
 	// add the newly created shots to the collision list.
 	for (auto & wobjp : Oo_info.rollback_wobjp) {
@@ -808,13 +800,9 @@ void multi_oo_simulate_rollback_shots(int frame_idx) {
 
 // restores ships to the positions they were in bedfore rollback.
 void multi_record_restore_positions() {
-	mprintf(("I'm the last one to run! 54\n"));
-	// If we do in between frame collision detection, we'll need to do this calculation frame by frame.  This restoration should probably be its own functions at some point.
 	for (auto restore_point : Oo_info.restore_points) {
 
 		object* objp = restore_point.roll_objp;
-
-		int cur_frame = Oo_info.cur_frame_index;
 
 		objp->pos = restore_point.position;
 		objp->orient = restore_point.orientation;
@@ -830,8 +818,7 @@ void multi_record_restore_positions() {
 
 // See if a newly arrived object update packet should be the new reference for the improved primary fire packet 
 void multi_ship_record_rank_seq_num(object* objp, ushort seq_num) 
-{//	mprintf(("I'm the last one to run! 19\n"));
-
+{
 	int net_sig_idx = objp->net_signature;
 
 	// see if it's more recent.  Most recent is best.
@@ -1189,11 +1176,6 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 #define PACK_USHORT(v) { std::uint16_t swap = INTEL_SHORT(v); memcpy( data + packet_size + header_bytes, &swap, sizeof(std::uint16_t) ); packet_size += sizeof(std::uint16_t); }
 #define PACK_INT(v) { std::int32_t swap = INTEL_INT(v); memcpy( data + packet_size + header_bytes, &swap, sizeof(std::int32_t) ); packet_size += sizeof(std::int32_t); }
 #define PACK_ULONG(v) { std::uint64_t swap = INTEL_LONG(v); memcpy( data + packet_size + header_bytes, &swap, sizeof(std::uint64_t) ); packet_size += sizeof(std::uint64_t); }
-// Cyborg17 - This is for percent values that could be from -100% to +100%. For use when exact values are as important as negative values.
-// We loose a tiny amount of accuracy by using 254 instead of 255, but this way the receiving computer will be able to tell without extra logic
-// whenever the float == 0.0f .
-#define PACK_POSITIVE_NEGATIVE_PERCENT(v) { std::uint8_t upercent; if(v < -1.0f){v = -1.0f;} v++; upercent = (v * 127.0f) <= 254.0f ? (std::uint8_t)(v * 127.0f) : (std::uint8_t)254; memcpy(data + packet_size + header_bytes, &upercent, sizeof(std::uint8_t)); packet_size++; }
-
 int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *data_out)
 {	//	mprintf(("I'm the last one to run! 25\n"));
 	ubyte data[255];
@@ -1237,7 +1219,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 
 	// for now, just always send the timestamp since we depend on it a lot
 	oo_flags |= OO_TIMESTAMP;
-	ushort temp_timestamp = Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()];
+	ushort temp_timestamp = (ushort)(Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()]);
 
 	// only the very longest frames are going to have greater than 255 ms, so cap it at that.
 	if (temp_timestamp > 255) {
@@ -1245,7 +1227,6 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	}
 	ubyte timestamp_out = (ubyte)temp_timestamp;
 	PACK_BYTE(timestamp_out);
-//		mprintf(("Packet foo: Timestamp is %d\n", temp_timestamp));
 
 	// putting this in the position bucket because it's mainly to help with position interpolation
 	multi_rate_add(NET_PLAYER_NUM(pl), "pos", 1);
@@ -1277,27 +1258,6 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 
 		packet_size += ret;	
 
-		// Cyborg17 - Send desired rotational velocity. But since we do have stationary ships, like sentries, that have no 
-		// rotational, so we need to check for 0.0f.  We can also save bandwidth by only sending those axes that the ship *can* use.
-		// This *will* work if client has matching table info, which it *should*, just like it does on subsystem info.
-		float temp_desired_rot = 0.0f;
-		if (objp->phys_info.max_rotvel.xyz.x > 0.0f) {
-			// Pack the desired rotvel 
-			temp_desired_rot = (objp->phys_info.desired_rotvel.xyz.x / objp->phys_info.max_rotvel.xyz.x);
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_rot);
-			ret++;
-		}
-		if (objp->phys_info.max_rotvel.xyz.y > 0.0f) {
-			temp_desired_rot = (objp->phys_info.desired_rotvel.xyz.y / objp->phys_info.max_rotvel.xyz.y);
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_rot);
-			ret++;
-		}
-		if (objp->phys_info.max_rotvel.xyz.z > 0.0f) {
-			temp_desired_rot = (objp->phys_info.desired_rotvel.xyz.z / objp->phys_info.max_rotvel.xyz.z);
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_rot);
-			ret++;
-		}
-
 		// global records		
 		multi_rate_add(NET_PLAYER_NUM(pl), "ori", ret);		
 		ret = 0;
@@ -1305,25 +1265,11 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		// in order to send data by axis we must rotate the global velocity into local coordinates
 		vec3d local_desired_vel;
 
-		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient);
-			
-	// forward and lateral desired velocity	
-		float temp_desired_vel;
-		if (objp->phys_info.max_vel.xyz.x > 0.0f) {
-			temp_desired_vel = local_desired_vel.xyz.x / objp->phys_info.max_vel.xyz.x;
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_vel);
-			ret++;
-		}
-		if (objp->phys_info.max_vel.xyz.y > 0.0f) {
-			temp_desired_vel = local_desired_vel.xyz.y / objp->phys_info.max_vel.xyz.y;
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_vel);
-			ret++;
-		}
-		if (objp->phys_info.max_vel.xyz.z > 0.0f) {
-			temp_desired_vel = local_desired_vel.xyz.z / objp->phys_info.max_vel.xyz.z;
-			PACK_POSITIVE_NEGATIVE_PERCENT(temp_desired_vel);
-			ret++;
-		}
+		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
+		
+		ret = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + packet_size + header_bytes, &objp->phys_info, local_desired_vel);
+
+		packet_size += ret;
 	}
 
 	// global records	
@@ -1646,8 +1592,6 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data, ushort seq_num)
 // more recently, but the packet has the newest AI info, we will still use the AI info, even though it's not the newest
 // packet.
 #define UNPACK_PERCENT(v)					{ ubyte temp_byte; memcpy(&temp_byte, data + offset, sizeof(ubyte)); v = (float)temp_byte / 255.0f; offset++;}
-// Cyborg17 -- Unpacks percents that go from -100% to positive 100% with low resolution. Output is from -100% to 100%.
-#define UNPACK_POSITIVE_NEGATIVE_PERCENT(v) { ubyte temp_byte; memcpy(&temp_byte, data + offset, sizeof(ubyte)); v = (float)temp_byte / 127.0f; v--; offset++;}
 int multi_oo_unpack_data(net_player* pl, ubyte* data)
 {//	mprintf(("I'm the last one to run! 26\n"));
 	int offset = 0;
@@ -1719,7 +1663,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// two variables to make the following code more readable.
 	int most_recent = interp_data->most_recent_packet;
 	bool prev_odd_wrap = interp_data->odd_wrap;
-	int bob = (prev_odd_wrap == true) ? 1 : 0;
 
 	// same wrap case ... if they are both true or both false.
 	if ( (oo_flags & OO_ODD_WRAP && prev_odd_wrap == true ) || (!(oo_flags & OO_ODD_WRAP) && (prev_odd_wrap == false) )) {
@@ -1845,6 +1788,15 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		offset += r5;
 		pos_and_time_data_size += r5;
 
+		vec3d local_desired_vel = vmd_zero_vector;
+
+		ubyte r6 = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + offset, &pobjp->phys_info, local_desired_vel);
+
+		offset += r6;
+		// change it back to global coordinates.
+		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
+		pos_and_time_data_size += r6;
+		/*
 		// Unpack desired rotational velocity.
 		float desired_rotvel;
 		if (pobjp->phys_info.max_rotvel.xyz.x > 0.0f) {
@@ -1862,10 +1814,9 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 				new_phys_info.desired_rotvel.xyz.z = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.z;
 			pos_and_time_data_size++;
 		}
-
+*/
 		// velocity is calculated from the last two positions
-		float temp_des_vel;
-		vec3d local_desired_vel = vmd_zero_vector;
+/*		float temp_des_vel;
 		if (pobjp->phys_info.max_vel.xyz.x > 0.0f) {
 			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
 			local_desired_vel.xyz.x = temp_des_vel * pobjp->phys_info.max_vel.xyz.x;
@@ -1881,9 +1832,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			local_desired_vel.xyz.z = temp_des_vel * pobjp->phys_info.max_vel.xyz.z;
 			pos_and_time_data_size++;
 		}
-
-		// change it back to global coordinates.
-		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
+*/
 
 		// make sure this is the newest frame sent and then start storing everything.
 		if (frame_comparison > interp_data->pos_comparison_frame) {
@@ -1971,10 +1920,8 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 	// Packet processing needs to stop here if the ship is leaving, dead or dying to prevent bugs.
 	if (shipp->is_dying_or_departing() || shipp->flags[Ship::Ship_Flags::Exploded]) {
-		mprintf(("but only used position because the ship was dying, departed, or already dead!\n"));
-		mprintf(("offset: %d, data size: %d, pos_and_time_data_size: %d\n", offset, data_size, pos_and_time_data_size));
-		offset = offset + data_size - pos_and_time_data_size;
-		mprintf(("offset is now: %d", offset));
+		int header_bytes = (MULTIPLAYER_MASTER) ? 5 : 7;		
+		offset = header_bytes + data_size;
 		return offset;
 	}
 
@@ -3144,7 +3091,7 @@ int multi_oo_is_interp_object(object *objp)
 
 // interp
 void multi_oo_interp(object* objp)
-{	//mprintf(("I'm the last one to run! 33\n"));
+{
 	// make sure its a valid ship
 	Assert(Game_mode & GM_MULTIPLAYER);
 	Assert(objp->net_signature <= STANDALONE_SHIP_SIG);
@@ -3421,8 +3368,8 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 }
 
 // Calculates how much time has gone by between the two most recent frames 
-float multi_oo_calc_pos_time_difference(int net_sig_idx) {
-	//mprintf(("I'm the last one to run! 35\n"));
+float multi_oo_calc_pos_time_difference(int net_sig_idx) 
+{
 	int old_frame = Oo_info.interp[net_sig_idx].prev_pack_pos_frame;
 	int new_frame = Oo_info.interp[net_sig_idx].cur_pack_pos_frame;
 
@@ -3431,7 +3378,9 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx) {
 		return -1.0f;
 	}
 	
-	Assertion(old_frame != new_frame, "multi_oo_calc_pos_time_difference somehow showed the same frame for old and new .");
+	if (old_frame == new_frame) {
+		mprintf(("multi_oo_calc_pos_time_difference somehow showed the same frame for old and new frame.\n"));
+	}
 	
 	if (old_frame == new_frame) {
 		return -1.0f;
