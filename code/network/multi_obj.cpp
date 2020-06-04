@@ -192,6 +192,8 @@ bool Afterburn_hack = false;			// HACK!!!
 
 void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info);
 
+
+
 // how much data we're willing to put into a given oo packet
 #define OO_MAX_SIZE					480
 
@@ -319,8 +321,7 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 // ---------------------------------------------------------------------------------------------------
 
 // Add a new ship to the tracking struct once it's valid in a mission.
-void multi_ship_record_add_ship(int obj_num)
-{mprintf(("1\n"));
+void multi_ship_record_add_ship(int obj_num){
 	object* objp = &Objects[obj_num];
 	int net_sig_idx = objp->net_signature;
 
@@ -433,8 +434,7 @@ void multi_ship_record_update_all()
 }
 
 // Increment the tracker per frame, before packets are processed
-void multi_ship_record_increment_frame() 
-{
+void multi_ship_record_increment_frame() {
 	Oo_info.number_of_frames++;
 	Oo_info.cur_frame_index++;
 
@@ -463,14 +463,12 @@ int multi_find_prev_frame_idx() {
 }
 
 // Calculates the current wrap from a packet sequence number or from an otherwise combined frame.
-ushort multi_ship_record_calculate_wrap(ushort combined_frame) 
-{	
+ushort multi_ship_record_calculate_wrap(ushort combined_frame) {	
 	return combined_frame  / MAX_FRAMES_RECORDED;
 }
 
 // Finds the first frame that is before the incoming timestamp.
-int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed)
-{	
+int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed){	
 	// unpack the wrap and frame from the client packet
 	int frame = client_frame % MAX_FRAMES_RECORDED;
 	bool same_wrap = false;
@@ -588,7 +586,7 @@ uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame) {
 	// Bogus values
 	Assertion(original_frame <= MAX_FRAMES_RECORDED, "Function multi_ship_record_get_time_elapsed() got passed an invalid original frame, this is a code error, please report. ");
 	Assertion(new_frame <= MAX_FRAMES_RECORDED, "Function multi_ship_record_get_time_elapsed() got passed an invalid new frame, this is a code error, please report. ");
-	if (original_frame >= MAX_FRAMES_RECORDED || original_frame >= MAX_FRAMES_RECORDED) {
+	if (original_frame >= MAX_FRAMES_RECORDED || new_frame >= MAX_FRAMES_RECORDED) {
 		return 0;
 	}
 
@@ -603,10 +601,12 @@ int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame
 	return return_value;
 }
 
+// Returns whether weapons currently being created should be part of the rollback simulation.
 bool multi_ship_record_get_rollback_wep_mode() {
 	return Oo_info.rollback_mode;
 }
 
+// Adds an object pointer to the list of weapons that needs to be simulated as part of rollback.
 void multi_ship_record_add_rollback_wep(int wep_objnum) {
 	object* wobjp = &Objects[wep_objnum];
 
