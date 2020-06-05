@@ -360,7 +360,7 @@ void multi_ship_record_add_ship(int obj_num){
 	// To use vectors for the subsystems, we have to init the subsystem tracking vectors here.
 	int subsystem_count = sip->n_subsystems;
 
-	while (Oo_info.interp[net_sig_idx].subsystems_comparison_frame.size() < subsystem_count) {
+	while ((int)Oo_info.interp[net_sig_idx].subsystems_comparison_frame.size() < subsystem_count) {
 		Oo_info.interp[net_sig_idx].subsystems_comparison_frame.push_back(-1);
 
 		for (int i = 0; i < MAX_PLAYERS; i++) {
