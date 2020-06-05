@@ -9600,14 +9600,6 @@ int ship_create(matrix* orient, vec3d* pos, int ship_type, const char* ship_name
 		entry->shipp = shipp;
 	}
 	
-	// If we're on a multi server, start up stracking for this in the Frame_Record struct.
-	if (Game_mode & (GM_MULTIPLAYER | GM_IN_MISSION)) {
-		if (MULTIPLAYER_MASTER) {
-			multi_ship_record_add_ship_server(objnum);
-		} else {
-			multi_ship_record_add_ship_client(objnum);
-		}
-
 	// Start up tracking for this ship in multi.
 	if (Game_mode & (GM_MULTIPLAYER)) {
 		multi_ship_record_add_ship(objnum);

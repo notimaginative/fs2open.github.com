@@ -44,7 +44,6 @@ struct weapon;
 // ---------------------------------------------------------------------------------------------------
 // POSITION AND ORIENTATION RECORDING
 // if it breaks, find Cyborg17 so you can yell at him
-// This section is almost all server side
 
 // Add a new ship *ON IN-GAME SHIP CREATION* to the tracking struct
 void multi_ship_record_add_ship(int obj_num);
@@ -70,6 +69,7 @@ matrix multi_ship_record_lookup_orientation(object* objp, int frame);
 // quickly lookup how much time has passed since the given frame.
 uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 
+// figures out how much time has passed 
 int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
 // Creates a weapon and adds it to the Frame Records so that we can  
@@ -98,8 +98,6 @@ void multi_oo_simulate_rollback_shots(int frame_idx);
 
 // restores ships to the positions they were in bedfore rollback.
 void multi_record_restore_positions();
-
-
 
 // ---------------------------------------------------------------------------------------------------
 // Client side frame tracking, for now used only to help lookup info from packets to improve client accuracy.
