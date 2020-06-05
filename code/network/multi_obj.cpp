@@ -212,7 +212,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 #define OO_TRIGGER_DOWN				(1<<8)		// if this is set, trigger is DOWN
 #define OO_SUPPORT_SHIP				(1<<9)		// Send extra info for the support ship.
 #define OO_AI_NEW					(1<<10)		// Send updated AI Info
-#define OO_TIMESTAMP				(1<<11)		// Send the current Timestamp.
+
 #define OO_ODD_WRAP					(1<<12)		// Is the sent frame an odd wrap? Initially not wrapped (0), then odd wrap (1), etc.
 
 #define OO_VIEW_CONE_DOT			(0.1f)
@@ -450,7 +450,6 @@ void multi_ship_record_increment_frame() {
 	}
 
 	Oo_info.timestamps[Oo_info.cur_frame_index] = timestamp();
-	// reset the number of times we've sent the timestamp to the client.
 }
 
 // returns the last frame's index.
@@ -1217,8 +1216,6 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		header_bytes = 5;
 	}	
 
-	// for now, just always send the timestamp since we depend on it a lot
-	oo_flags |= OO_TIMESTAMP;
 	ushort temp_timestamp = (ushort)(Oo_info.timestamps[Oo_info.cur_frame_index] - Oo_info.timestamps[multi_find_prev_frame_idx()]);
 
 	// only the very longest frames are going to have greater than 255 ms, so cap it at that.
@@ -1715,27 +1712,26 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 	// get the timestamp that belonged to this server for this frame.
 	// Because we want as many timestamps as possible, we want to record what we get, no matter when it came from.
-	if (oo_flags & OO_TIMESTAMP) {
-		ubyte timestamp;
-		GET_DATA(timestamp);
-		pos_and_time_data_size++;
+	ubyte received_timestamp;
+	GET_DATA(received_timestamp);
+	pos_and_time_data_size++;
 
-		// figure out how many items we may have to create
-		int temp_diff = (int)seq_num - (int)Oo_info.received_frametimes.size() + 1;
-		// if it already has enough slots, just fill in the value.
-		if (temp_diff <= 0) {
-			Oo_info.received_frametimes[seq_num] = timestamp;
-		}	// if there weren't enough slots, create the necessary slots.
-		else {
-			// loop is checked against 1, because once there is only a difference of 1, we should add the timestamp onto the end.
-			for (int i = temp_diff; i > 1; i--) {
-				// keep adding zero to the timestamps we have not yet received, because that is our impossible value.
-				Oo_info.received_frametimes.push_back(0);
-			}
-			// lastly, add the timestamp we received to the end.
-			Oo_info.received_frametimes.push_back(timestamp);
+	// figure out how many items we may have to create
+	int temp_diff = (int)seq_num - (int)Oo_info.received_frametimes.size() + 1;
+	// if it already has enough slots, just fill in the value.
+	if (temp_diff <= 0) {
+		Oo_info.received_frametimes[seq_num] = received_timestamp;
+	}	// if there weren't enough slots, create the necessary slots.
+	else {
+		// loop is checked against 1, because once there is only a difference of 1, we should add the timestamp onto the end.
+		for (int i = temp_diff; i > 1; i--) {
+			// keep adding zero to the timestamps we have not yet received, because that is our impossible value.
+			Oo_info.received_frametimes.push_back(0);
 		}
+		// lastly, add the timestamp we received to the end.
+		Oo_info.received_frametimes.push_back(received_timestamp);
 	}
+	
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// SPECIAL CLIENT INFO
@@ -1796,43 +1792,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		// change it back to global coordinates.
 		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
 		pos_and_time_data_size += r6;
-		/*
-		// Unpack desired rotational velocity.
-		float desired_rotvel;
-		if (pobjp->phys_info.max_rotvel.xyz.x > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
-				new_phys_info.desired_rotvel.xyz.x = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.x;
-			pos_and_time_data_size++;
-		}
-		if (pobjp->phys_info.max_rotvel.xyz.y > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
-				new_phys_info.desired_rotvel.xyz.y = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.y;
-			pos_and_time_data_size++;
-		}
-		if (pobjp->phys_info.max_rotvel.xyz.z > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(desired_rotvel)
-				new_phys_info.desired_rotvel.xyz.z = desired_rotvel * pobjp->phys_info.max_rotvel.xyz.z;
-			pos_and_time_data_size++;
-		}
-*/
-		// velocity is calculated from the last two positions
-/*		float temp_des_vel;
-		if (pobjp->phys_info.max_vel.xyz.x > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
-			local_desired_vel.xyz.x = temp_des_vel * pobjp->phys_info.max_vel.xyz.x;
-			pos_and_time_data_size++;
-		}
-		if (pobjp->phys_info.max_vel.xyz.y > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
-			local_desired_vel.xyz.y = temp_des_vel * pobjp->phys_info.max_vel.xyz.y;
-			pos_and_time_data_size++;
-		}
-		if (pobjp->phys_info.max_vel.xyz.z > 0.0f) {
-			UNPACK_POSITIVE_NEGATIVE_PERCENT(temp_des_vel);
-			local_desired_vel.xyz.z = temp_des_vel * pobjp->phys_info.max_vel.xyz.z;
-			pos_and_time_data_size++;
-		}
-*/
 
 		// make sure this is the newest frame sent and then start storing everything.
 		if (frame_comparison > interp_data->pos_comparison_frame) {
