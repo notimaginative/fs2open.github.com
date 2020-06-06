@@ -533,42 +533,6 @@ int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elap
 	return -1;
 }
 
-// verify that a given frame exists for a given ship, requires the sequence number that the client sends.
-bool multi_ship_record_verify_frame(object* objp, int combined_frame) 
-{
-//	mprintf(("I'm the last one to run! 8\n"));
-
-	// calculate the exact frame that combined_frame should be, if the largest wrap has occured. 
-	if (Oo_info.number_of_frames >= SERVER_TRACKER_LARGE_WRAP_TOTAL) {
-		int temp = Oo_info.number_of_frames % SERVER_TRACKER_LARGE_WRAP_TOTAL;
-		ushort larger_wraps = (ushort)((Oo_info.number_of_frames - temp)  / SERVER_TRACKER_LARGE_WRAP_TOTAL);
-		combined_frame += (larger_wraps * SERVER_TRACKER_LARGE_WRAP_TOTAL);
-//		mprintf(("Part1 was true (somehow), Vars are temp %d, larger_wraps %d, combined_frame %d  \n", temp, larger_wraps, combined_frame));
-	}
-
-	// do a quick check to see if the frame sent by the client was pre-wrap and decrement, if so.
-	if (combined_frame > Oo_info.number_of_frames) {
-//		mprintf(("Part2 was true, combined_frame %d, number_of_frames %d \n", combined_frame, Oo_info.number_of_frames));
-		// if it looks like pre-wrap and then subtracts to less than zero, it's invalid data.
-		if (combined_frame - SERVER_TRACKER_LARGE_WRAP_TOTAL < 0) {
-//			mprintf(("Invalid data!\n"));
-			return false;
-		}
-
-		combined_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
-//		mprintf(("Combined_frame decremented to %d combined_frame \n", combined_frame));
-	}
-
-	// combined_frame should now house the correct frame, no we compare to verify. TODO: finish the death_or_depart variable assignments 
-	if (/*combined_frame < object_updates.svr_frames.death_or_depart_frame[objp->net_signature] && */ combined_frame >= Oo_info.frame_info[objp->net_signature].initial_frame) {
-		//		mprintf(("Final frame verification SUCCEEEEEEEEEDED!!!!.\n"));
-
-		return true;
-	}
-	//	mprintf(("Final frame verification failed.\n"));
-	return false;
-}
-
 // Quick lookup for the record of position.
 vec3d multi_ship_record_lookup_position(object* objp, int frame) {
 	return Oo_info.frame_info[objp->net_signature].positions[frame];
@@ -736,11 +700,6 @@ void multi_ship_record_do_rollback() {
 	for (int i = 0; i < MAX_FRAMES_RECORDED; i++){ 
 		Oo_info.rollback_shots[i].clear();
 	}
-	for (auto temp_wobjp : Oo_info.rollback_wobjp) {
-
-		float bob = vm_vec_dist_squared(&temp_wobjp->pos, &Objects[temp_wobjp->parent].pos);
-	}
-	mprintf(("\n"));
 
 	Oo_info.rollback_wobjp.clear();
 }
