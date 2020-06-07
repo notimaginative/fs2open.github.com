@@ -3384,20 +3384,20 @@ void bitbuffer_put( bitbuffer *bitbuf, uint data, int bit_count )
 
 uint bitbuffer_get_unsigned( bitbuffer *bitbuf, int bit_count ) 
 {
-	uint mask;
+	uint local_mask;
 	uint return_value;
 
-	mask = 1L << ( bit_count - 1 );
+	local_mask = 1L << ( bit_count - 1 );
 	return_value = 0;
 
-	while ( mask != 0)	{
+	while ( local_mask != 0)	{
 		if ( bitbuf->mask == 0x80 ) {
 			bitbuf->rack = *bitbuf->data++;
 		}
 		if ( bitbuf->rack & bitbuf->mask )	{
-			return_value |= mask;
+			return_value |= local_mask;
 		}
-		mask >>= 1;
+		local_mask >>= 1;
 		bitbuf->mask >>= 1;
 		if ( bitbuf->mask == 0 )	{
 			bitbuf->mask = 0x80;
@@ -3409,20 +3409,20 @@ uint bitbuffer_get_unsigned( bitbuffer *bitbuf, int bit_count )
 
 int bitbuffer_get_signed( bitbuffer *bitbuf, int bit_count ) 
 {
-	uint mask;
+	uint local_mask;
 	uint return_value;
 
-	mask = 1L << ( bit_count - 1 );
+	local_mask = 1L << ( bit_count - 1 );
 	return_value = 0;
 
-	while ( mask != 0)	{
+	while ( local_mask != 0)	{
 		if ( bitbuf->mask == 0x80 ) {
 			bitbuf->rack = *bitbuf->data++;
 		}
 		if ( bitbuf->rack & bitbuf->mask )	{
-			return_value |= mask;
+			return_value |= local_mask;
 		}
-		mask >>= 1;
+		local_mask >>= 1;
 		bitbuf->mask >>= 1;
 		if ( bitbuf->mask == 0 )	{
 			bitbuf->mask = 0x80;
@@ -3626,42 +3626,43 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 	if ( write )	{
 		// output desired rotational velocity
 		if (pi->max_rotvel.xyz.x > 0.0f) {
-			a = fl2i(round( (pi->desired_rotvel.xyz.x / pi->max_rotvel.xyz.x) * 64.0f)); 
+			a = fl2i(round( (pi->desired_rotvel.xyz.x / pi->max_rotvel.xyz.x) * 15.0f)); 
 		}
 
 		if (pi->max_rotvel.xyz.y > 0.0f) {
-			b = fl2i(round( (pi->desired_rotvel.xyz.y / pi->max_rotvel.xyz.y) * 64.0f));
+			b = fl2i(round( (pi->desired_rotvel.xyz.y / pi->max_rotvel.xyz.y) * 15.0f));
 		}
 
 		if (pi->max_rotvel.xyz.z > 0.0f) {
-			c = fl2i(round( (pi->desired_rotvel.xyz.z / pi->max_rotvel.xyz.z) * 64.0f));
+			c = fl2i(round( (pi->desired_rotvel.xyz.z / pi->max_rotvel.xyz.z) * 15.0f));
 		}
 
-		CAP(a,-64,63);
-		CAP(b,-64,63);
-		CAP(c,-64,63);
+		CAP(a,-15,15);
+		CAP(b,-15,15);
+		CAP(c,-15,15);
 		bitbuffer_put( &buf, (uint)a,5);
 		bitbuffer_put( &buf, (uint)b,5);
 		bitbuffer_put( &buf, (uint)c,5);
 
+		// pack desired velocity.
 		if (pi->max_vel.xyz.x > 0.0f) {
-			d = fl2i(round( (local_desired_vel.xyz.x / pi->max_vel.xyz.x) * 64.0f)); 
+			d = fl2i(round( (local_desired_vel.xyz.x / pi->max_vel.xyz.x) * 7.0f)); 
 		}
 
 		if (pi->max_vel.xyz.y > 0.0f) {
-			e = fl2i(round( (local_desired_vel.xyz.y / pi->max_vel.xyz.y) * 64.0f));
+			e = fl2i(round( (local_desired_vel.xyz.y / pi->max_vel.xyz.y) * 7.0f));
 		}
-
+		// for z velocity, take into account afterburner.
 		if (pi->max_vel.xyz.z > 0.0f) {
-			f = fl2i(round( (local_desired_vel.xyz.z / pi->max_vel.xyz.z) * 256.0f));
+			f = fl2i(round( (local_desired_vel.xyz.z / pi->afterburner_max_vel.xyz.z) * 255.0f));
 		}
 
-		CAP(d,-64,63);
-		CAP(e,-64,63);
-		CAP(f,-256,255);
-		bitbuffer_put( &buf, (uint)a,5);
-		bitbuffer_put( &buf, (uint)b,5);
-		bitbuffer_put( &buf, (uint)c,7);
+		CAP(d,-7,7);
+		CAP(e,-7,7);
+		CAP(f,-255,255);
+		bitbuffer_put( &buf, (uint)a,4);
+		bitbuffer_put( &buf, (uint)b,4);
+		bitbuffer_put( &buf, (uint)c,9);
 
 
 
@@ -3673,17 +3674,17 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 		a = bitbuffer_get_signed(&buf,5);
 		b = bitbuffer_get_signed(&buf,5);
 		c = bitbuffer_get_signed(&buf,5);
-		pi->rotvel.xyz.x = pi->max_rotvel.xyz.x * i2fl(a)/64.0f;
-		pi->rotvel.xyz.y = pi->max_rotvel.xyz.y * i2fl(b)/64.0f;
-		pi->rotvel.xyz.z = pi->max_rotvel.xyz.z * i2fl(c)/64.0f;
+		pi->rotvel.xyz.x = pi->max_rotvel.xyz.x * i2fl(a)/15.0f;
+		pi->rotvel.xyz.y = pi->max_rotvel.xyz.y * i2fl(b)/15.0f;
+		pi->rotvel.xyz.z = pi->max_rotvel.xyz.z * i2fl(c)/15.0f;
 
 		// unpack desired velocity
-		d = bitbuffer_get_signed(&buf,5);
-		e = bitbuffer_get_signed(&buf,5);
-		f = bitbuffer_get_signed(&buf,7);
-		local_desired_vel.xyz.x = pi->max_vel.xyz.x * i2fl(d)/64.0f;
-		local_desired_vel.xyz.y = pi->max_vel.xyz.y * i2fl(e)/64.0f;
-		local_desired_vel.xyz.z = pi->max_vel.xyz.z * i2fl(f)/256.0f;
+		d = bitbuffer_get_signed(&buf,4);
+		e = bitbuffer_get_signed(&buf,4);
+		f = bitbuffer_get_signed(&buf,9);
+		local_desired_vel.xyz.x = pi->max_vel.xyz.x * i2fl(d)/7.0f;
+		local_desired_vel.xyz.y = pi->max_vel.xyz.y * i2fl(e)/7.0f;
+		local_desired_vel.xyz.z = pi->afterburner_max_vel.xyz.z * i2fl(f)/255.0f;
 
 
 		return bitbuffer_read_flush(&buf);

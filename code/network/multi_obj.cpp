@@ -710,11 +710,9 @@ void multi_oo_fire_rollback_shots(int frame_idx){
 		rollback_shot->shooterp->pos = rollback_shot->pos;
 		rollback_shot->shooterp->orient = rollback_shot->orient;
 		if (rollback_shot->secondary_shot) {
-			mprintf(("SECONDARY ROLLBACK\n"));
 			ship_fire_secondary(rollback_shot->shooterp, 1, true);
 		}
 		else {
-			mprintf(("PRIMARY ROLLBACK\n"));
 			ship_fire_primary(rollback_shot->shooterp, 0, 1, true);
 		}
 	}
@@ -729,7 +727,7 @@ void multi_oo_fire_rollback_shots(int frame_idx){
 
 // moves all rollbacked ships back to the original frame
 void multi_oo_restore_frame(int frame_idx){
-	mprintf(("I'm the last one to run! 52\n"));
+
 	for (auto& objp : Oo_info.rollback_ships) {
 		Assertion(objp != nullptr, "Nullptr somehow got into the rollback ship vector, please report!");
 
@@ -741,7 +739,7 @@ void multi_oo_restore_frame(int frame_idx){
 
 // pushes the rollback weapons forward for a single rollback frame.
 void multi_oo_simulate_rollback_shots(int frame_idx) {
-	mprintf(("I'm the last one to run! 53\n"));
+
 	int prev_frame = frame_idx - 1;
 	if (prev_frame < 0) {
 		prev_frame = MAX_FRAMES_RECORDED - 1;
@@ -830,7 +828,7 @@ int multi_client_lookup_current_frametime() {
 
 // TODO: to go along with this, we should probably update change ship so that interpolation info can be reset 
 void multi_oo_respawn_reset_info(ushort net_sig) {
-	mprintf(("I'm the last one to run! 24\n"));
+
 	Assertion(net_sig != 0, "Multi_reset_oo_info got passed an invalid value. This is a coder error, please report.");
 	if (net_sig == 0) {
 		return;
@@ -906,7 +904,6 @@ int OO_sort = 1;
 
 bool multi_oo_sort_func(const short &index1, const short &index2)
 {
-//	mprintf(("I'm the last one to run!!! 16\n"));
 
 	object *obj1, *obj2;
 	float dist1, dist2;
@@ -1135,7 +1132,7 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 #define PACK_INT(v) { std::int32_t swap = INTEL_INT(v); memcpy( data + packet_size + header_bytes, &swap, sizeof(std::int32_t) ); packet_size += sizeof(std::int32_t); }
 #define PACK_ULONG(v) { std::uint64_t swap = INTEL_LONG(v); memcpy( data + packet_size + header_bytes, &swap, sizeof(std::uint64_t) ); packet_size += sizeof(std::uint64_t); }
 int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *data_out)
-{	//	mprintf(("I'm the last one to run! 25\n"));
+{
 	ubyte data[255];
 	ubyte data_size = 0, ret = 0;	
 	ship *shipp;	
@@ -1221,7 +1218,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		// in order to send data by axis we must rotate the global velocity into local coordinates
 		vec3d local_desired_vel;
 
-		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
+		vm_vec_unrotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
 		
 		ret = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + packet_size + header_bytes, &objp->phys_info, local_desired_vel);
 
@@ -1549,7 +1546,7 @@ int multi_oo_unpack_client_data(net_player *pl, ubyte *data, ushort seq_num)
 // packet.
 #define UNPACK_PERCENT(v)					{ ubyte temp_byte; memcpy(&temp_byte, data + offset, sizeof(ubyte)); v = (float)temp_byte / 255.0f; offset++;}
 int multi_oo_unpack_data(net_player* pl, ubyte* data)
-{//	mprintf(("I'm the last one to run! 26\n"));
+{
 	int offset = 0;
 	object* pobjp;
 	ushort net_sig = 0;
@@ -1601,7 +1598,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// if we can't find the object, set pointer to bogus object to continue reading the data
 	if ( (pobjp == nullptr) || (pobjp->type != OBJ_SHIP) || (pobjp->instance < 0) || (pobjp->instance >= MAX_SHIPS) || (Ships[pobjp->instance].ship_info_index < 0) || (Ships[pobjp->instance].ship_info_index >= ship_info_size())) {
 		offset += data_size;
-		mprintf(("but returned early because of general weirdness!\n"));
 		return offset;
 	}
 
@@ -1730,6 +1726,8 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		offset += r1;
 		pos_and_time_data_size += r1;
 
+		mprintf(("position received from pacet: %f %f %f\n", new_pos.xyz.x, new_pos.xyz.y, new_pos.xyz.z));
+
 		// unpack orientation
 		int r2 = multi_pack_unpack_orient( 0, data + offset, &new_angles );
 		offset += r2;
@@ -1737,7 +1735,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		
 		// new version of the orient packer sends angles instead to save on bandwidth, so we'll need the orienation from that.
 		vm_angles_2_matrix(&new_orient, &new_angles);
-		vm_orthogonalize_matrix(&new_orient);
+//		vm_orthogonalize_matrix(&new_orient);
 
 		int r5 = multi_pack_unpack_rotvel( 0, data + offset, &new_phys_info );
 		offset += r5;
@@ -1746,10 +1744,10 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		vec3d local_desired_vel = vmd_zero_vector;
 
 		ubyte r6 = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + offset, &pobjp->phys_info, local_desired_vel);
-
+		mprintf(("desired velocity %f %f %f", local_desired_vel.xyz.x, local_desired_vel.xyz.y, local_desired_vel.xyz.z));
 		offset += r6;
 		// change it back to global coordinates.
-		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
+		vm_vec_rotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
 		pos_and_time_data_size += r6;
 
 		// make sure this is the newest frame sent and then start storing everything.
@@ -1787,11 +1785,16 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 		}
 
+		// implement desired_vel and desired rotvel
 		if (pos_new) {
-			pobjp->phys_info = new_phys_info;			
-			interp_data->cur_pack_des_vel = pobjp->phys_info.desired_vel;
+			interp_data->cur_pack_des_vel = new_phys_info.desired_vel;
 			interp_data->cur_pack_local_des_vel = local_desired_vel;
-			interp_data->cur_pack_des_rot_vel = pobjp->phys_info.desired_rotvel;
+			interp_data->cur_pack_des_rot_vel = new_phys_info.desired_rotvel;
+
+			vm_vec_avg(&new_phys_info.desired_vel, &new_phys_info.desired_vel, &interp_data->cur_pack_des_vel);
+			vm_vec_avg(&new_phys_info.desired_rotvel, &new_phys_info.desired_rotvel, &interp_data->cur_pack_des_rot_vel);
+
+			pobjp->phys_info = new_phys_info;			
 		}
 
 		float temp_distance = vm_vec_dist(&new_pos, &pobjp->pos);
@@ -2060,7 +2063,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 // reset the timestamp appropriately for the passed in object
 void multi_oo_reset_timestamp(net_player *pl, object *objp, int range, int in_cone)
-{//	mprintf(("I'm the last one to run! 27\n"));
+{
 	int stamp = 0;	
 
 	// if this is the guy's target, 
@@ -2109,7 +2112,7 @@ void multi_oo_reset_timestamp(net_player *pl, object *objp, int range, int in_co
 
 // determine what needs to get sent for this player regarding the passed object, and when
 int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
-{//	mprintf(("I'm the last one to run! 28\n"));
+{
 	ushort oo_flags = 0;
 	int stamp;
 	int player_index;
@@ -2428,8 +2431,7 @@ void multi_oo_process_update(ubyte *data, header *hinfo)
 
 // initialize all object update info (call whenever entering gameplay state)
 void multi_init_oo_and_ship_tracker()
-{	//mprintf(("I'm the last one to run! 29\n"));
-
+{
 	// setup initial object update info	
 	// Part 1: Get the non-repeating parts of the struct set.
 
@@ -2654,7 +2656,7 @@ void multi_oo_send_changed_object(object *changedobj)
 
 // updates all interpolation info for a specific ship
 void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new_ori_angles, matrix* new_ori_mat, physics_info* new_phys_info, bool adjust_pos, bool newest_pos)
-{ 	//mprintf(("I'm the last one to run! 30\n"));
+{
 	Assert(objp != nullptr);
 
 	if (objp == nullptr) {
@@ -2673,7 +2675,7 @@ void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new
 
 			Oo_info.interp[net_sig_idx].old_angles = Oo_info.interp[net_sig_idx].new_angles;
 			Oo_info.interp[net_sig_idx].new_angles = *new_ori_angles;
-
+			mprintf(("Positions were updated to %f %F %f\n", Oo_info.interp[net_sig_idx].new_packet_position.xyz.x, Oo_info.interp[net_sig_idx].new_packet_position.xyz.y, Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
 		} // if this is the second newest, update that instead
 		else {
 			Oo_info.interp[net_sig_idx].old_packet_position = *new_pos;
@@ -3057,9 +3059,11 @@ void multi_oo_interp(object* objp)
 		// adding the 1 frame brings the client simulation closer to the server simulation because of ping
 		float time_factor = (time_elapsed / packet_delta) + 1.0f;
 
+		mprintf(("time_factor was %f\n", time_factor));
 		// if there was no movement, bash bash bash
 		if (interp_data->prev_packet_positionless) {
 			objp->pos = interp_data->new_packet_position;
+			mprintf(("position was bashed\n"));
 			objp->orient = interp_data->new_orientation;
 		} // Overshoting in this frame or some edge case bug. Just sim the ship from the known values.
 		else if (time_factor > 4.0f || time_factor < 0.0f) {
@@ -3152,10 +3156,12 @@ void multi_oo_interp(object* objp)
 				vm_interpolate_angles_quick(&temp_angles, &old_angles, &new_angles, time_factor);
 				vm_angles_2_matrix(&objp->orient, &temp_angles);
 
-				vec3d temp_vec;
-				vm_vec_sub(&temp_vec, &new_velocity, &old_velocity);
-				vm_vec_scale(&temp_vec, time_factor);
-				vm_vec_add(&objp->phys_info.vel, &temp_vec, &old_velocity);
+				mprintf(("\n\n\n Probs what's wrong... \n time_factor %f, new_velocity %f %f %f, old velocity %f %f %f, ", time_factor, new_velocity.xyz.x, new_velocity.xyz.y, new_velocity.xyz.z, old_velocity.xyz.x, old_velocity.xyz.y, old_velocity.xyz.z));
+
+				vm_vec_scale(&new_velocity, time_factor);
+				vm_vec_scale(&old_velocity, 1 - time_factor);
+				vm_vec_add(&objp->phys_info.vel, &new_velocity, &old_velocity);
+				mprintf(("final %f %f %f\n", objp->phys_info.vel.xyz.x, objp->phys_info.vel.xyz.y, objp->phys_info.vel.xyz.z));
 			}
 		}
 	}
@@ -3167,7 +3173,7 @@ void multi_oo_interp(object* objp)
 }
 
 void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info)
-{	//mprintf(("I'm the last one to run! 34\n"));
+{
 	Assert(objp != nullptr);
 
 	if (objp == nullptr) {
@@ -3178,10 +3184,11 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	
 	// find the float time version of how much time has passed
 	float delta = multi_oo_calc_pos_time_difference(net_sig_idx);
-
+	mprintf(("delta was decided as %f\n", delta));
 	// if an error or invalid value, use the local timestamps instead of those received. Should be rare.
-	if (delta == -1.0f || delta == 0.0f) {
-		delta = float(timestamp() - Oo_info.received_frametimes[Oo_info.interp[net_sig_idx].pos_timestamp]);
+	if (delta <= 0.0f) {
+		delta = float(timestamp() - Oo_info.received_frametimes[Oo_info.interp[net_sig_idx].pos_timestamp]) / 1000.0f;
+		mprintf(("delta was calculated using alternate method, changed to: %f", delta));
 	}
 
 	Oo_info.interp[net_sig_idx].pos_time_delta = delta;
@@ -3193,40 +3200,61 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	vm_vec_scale(&global_velocity, 1.0f/delta);
 
 	// Get rid of any rubberbanding here
-	if (vm_vec_mag_squared(&global_velocity) >= 0.0f) { // no "rubberbanding" if there's no velocity, just a possible correction to the position.
+	if (vm_vec_mag_squared(&global_velocity) >= 0.0f) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
 
 		vec3d local_error, local_vel, local_new_position;
 
 		// change velocity to local coordinates.
-		vm_vec_rotate(&local_vel, &global_velocity, new_orient);
+		vm_vec_unrotate(&local_vel, &global_velocity, new_orient);
 		// change error to local coordiantes.
-		vm_vec_rotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
+		vm_vec_unrotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
 		// change last received position to local coordinates.
-		vm_vec_rotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_packet_position, new_orient);
+		vm_vec_unrotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_packet_position, new_orient);
+		mprintf(("global velocity:\n %f, %f, %f\nlocal velocity:\n %f, %f, %f\nlocal_error\n %f, %f, %f\nlocal_new_position %f, %f, %f\n",global_velocity.xyz.x,global_velocity.xyz.y,global_velocity.xyz.z, local_vel.xyz.x, local_vel.xyz.y, local_vel.xyz.z, local_error.xyz.x, local_error.xyz.y, local_error.xyz.z, local_new_position.xyz.x, local_new_position.xyz.y, local_new_position.xyz.z));
 		// get rid of rubberbanding for each direction.  If there's any disagreement in the signs, just get rid of it and go with the current ship location.
 		// forward/back.
+		mprintf(("switch 1 "));
 		if ( (local_error.xyz.z < 0.0f && local_vel.xyz.z > 0.0f) || (local_error.xyz.z > 0.0f && local_vel.xyz.z < 0.0f) ) {			
 			local_error.xyz.z = 0.0f;						// Get rid of error factor
+			mprintf(("true "));
+		}
+		else {
+			mprintf(("false "));
+
 		}
 		// up/down
 		if ( (local_error.xyz.y < 0.0f && local_vel.xyz.y > 0.0f) || (local_error.xyz.y > 0.0f && local_vel.xyz.y < 0.0f) ) {
-			local_error.xyz.y = 0.0f;
+			local_error.xyz.y = 0.0f;		mprintf(("2 true"));
+
+		}
+		else {
+			mprintf(("2 false "));
+
 		}
 		// left/right
 		if ( (local_error.xyz.x < 0.0f && local_vel.xyz.x > 0.0f) || (local_error.xyz.x > 0.0f && local_vel.xyz.x < 0.0f) ) {
-			local_error.xyz.x = 0.0f;
+			local_error.xyz.x = 0.0f; 		mprintf(("3 true"));
+
+		}
+		else {
+			mprintf(("false\n"));
+
 		}
 
 		// store the results for later.
 		// some error remains
 		if (vm_vec_mag_squared(&local_error) > 0.0f) {
-			vm_vec_unrotate(&Oo_info.interp[net_sig_idx].position_error, &local_error, new_orient);
+			vm_vec_rotate(&Oo_info.interp[net_sig_idx].position_error, &local_error, new_orient);
 		}  // all error was removed, so just set it to zero to keep from breaking vector math
 		else {
 			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
+
 		}
+		mprintf(("new_position_error %f %f %f\n", Oo_info.interp[net_sig_idx].position_error.xyz.x, Oo_info.interp[net_sig_idx].position_error.xyz.y, Oo_info.interp[net_sig_idx].position_error.xyz.z));
+
 		// store "new_point"
-		vm_vec_unrotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
+		vm_vec_rotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
+		mprintf(("new packet position.... %f %f %f\n", Oo_info.interp[net_sig_idx].new_packet_position.xyz.x, Oo_info.interp[net_sig_idx].new_packet_position.xyz.y, Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
 	}
 
 	// get the spline representing where this new point tells us we'd be heading
@@ -3251,7 +3279,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Adjust desired velocity, because it's in world coordinates, and it doesn't make sense to reuse the same one four more times.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_a = ang_estimated;
 
@@ -3265,7 +3293,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_b = ang_estimated;
 	Oo_info.interp[net_sig_idx].anticipated_velocity2 = p_copy.vel;
@@ -3275,7 +3303,7 @@ void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orie
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_c = ang_estimated;
 	Oo_info.interp[net_sig_idx].anticipated_velocity3 = p_copy.vel;
