@@ -470,31 +470,29 @@ ushort multi_ship_record_calculate_wrap(ushort combined_frame) {
 int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed){	
 	// unpack the wrap and frame from the client packet
 	int frame = client_frame % MAX_FRAMES_RECORDED;
-	bool same_wrap = false;
 	// get how many frames we would go into the future.
 	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
 
-	// easy case, client is reasonably up to date, so just return the frame.
-	if (wrap == Oo_info.wrap_count) {
-		same_wrap = true;
-	}	// somewhat out of date but still salvagable case.
-	else if (wrap == (Oo_info.wrap_count - 1)) {
+	// if the wrap is not the same.
+	if (wrap != Oo_info.wrap_count) {
+		// somewhat out of date but still salvagable case.
+		if (wrap == (Oo_info.wrap_count - 1)) {
 
-		// but we can't use it if it would index to info in the current wrap instead of the previous wrap.
-		if (frame <= Oo_info.cur_frame_index) {
-			return -1;
-		}
-
+			// but we can't use it if it would index to info in the current wrap instead of the previous wrap.
+			if (frame <= Oo_info.cur_frame_index) {
+				return -1;
+			}
 		// Just in case the larger wrap just happened....
-	} else if ((wrap == MAX_SERVER_TRACKER_SMALL_WRAPS - 1) && Oo_info.wrap_count == 0){
+		} else if ((wrap == MAX_SERVER_TRACKER_SMALL_WRAPS - 1) && Oo_info.wrap_count == 0){
+			// again we can't use it if it would index to info in the current wrap instead of the previous wrap.
+			if (frame <= Oo_info.cur_frame_index) {
+				return -1;
+			}
 
-		if (frame <= Oo_info.cur_frame_index) {
+		} // otherwise the request is unsalvagable.
+		else {
 			return -1;
 		}
-
-		// request is way too old.
-	} else {
-		return -1;
 	}
 
 	// Now that the wrap has been verified, if time_elapsed is zero return the frame it gave us.
