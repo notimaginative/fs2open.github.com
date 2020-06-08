@@ -3614,7 +3614,7 @@ int multi_pack_unpack_rotvel( int write, ubyte *data, physics_info *pi)
 	}
 }
 
-ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, physics_info *pi, vec3d local_desired_vel)
+ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, physics_info *pi, vec3d* local_desired_vel)
 {
 	bitbuffer buf;
 
@@ -3646,23 +3646,23 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 
 		// pack desired velocity.
 		if (pi->max_vel.xyz.x > 0.0f) {
-			d = fl2i(round( (local_desired_vel.xyz.x / pi->max_vel.xyz.x) * 7.0f)); 
+			d = fl2i(round( (local_desired_vel->xyz.x / pi->max_vel.xyz.x) * 7.0f)); 
 		}
 
 		if (pi->max_vel.xyz.y > 0.0f) {
-			e = fl2i(round( (local_desired_vel.xyz.y / pi->max_vel.xyz.y) * 7.0f));
+			e = fl2i(round( (local_desired_vel->xyz.y / pi->max_vel.xyz.y) * 7.0f));
 		}
 		// for z velocity, take into account afterburner.
 		if (pi->max_vel.xyz.z > 0.0f) {
-			f = fl2i(round( (local_desired_vel.xyz.z / pi->afterburner_max_vel.xyz.z) * 255.0f));
+			f = fl2i(round( (local_desired_vel->xyz.z / pi->afterburner_max_vel.xyz.z) * 255.0f));
 		}
 
 		CAP(d,-7,7);
 		CAP(e,-7,7);
 		CAP(f,-255,255);
-		bitbuffer_put( &buf, (uint)a,4);
-		bitbuffer_put( &buf, (uint)b,4);
-		bitbuffer_put( &buf, (uint)c,9);
+		bitbuffer_put( &buf, (uint)d,4);
+		bitbuffer_put( &buf, (uint)e,4);
+		bitbuffer_put( &buf, (uint)f,9);
 
 
 
@@ -3682,9 +3682,9 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 		d = bitbuffer_get_signed(&buf,4);
 		e = bitbuffer_get_signed(&buf,4);
 		f = bitbuffer_get_signed(&buf,9);
-		local_desired_vel.xyz.x = pi->max_vel.xyz.x * i2fl(d)/7.0f;
-		local_desired_vel.xyz.y = pi->max_vel.xyz.y * i2fl(e)/7.0f;
-		local_desired_vel.xyz.z = pi->afterburner_max_vel.xyz.z * i2fl(f)/255.0f;
+		local_desired_vel->xyz.x = pi->max_vel.xyz.x * i2fl(d)/7.0f;
+		local_desired_vel->xyz.y = pi->max_vel.xyz.y * i2fl(e)/7.0f;
+		local_desired_vel->xyz.z = pi->afterburner_max_vel.xyz.z * i2fl(f)/255.0f;
 
 
 		return bitbuffer_read_flush(&buf);

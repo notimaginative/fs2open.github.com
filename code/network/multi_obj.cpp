@@ -1220,7 +1220,8 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 
 		vm_vec_unrotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
 		
-		ret = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + packet_size + header_bytes, &objp->phys_info, local_desired_vel);
+		mprintf(("Before packing the unrotated desired velocity is %f, %f, %f\n", local_desired_vel.xyz.x, local_desired_vel.xyz.y, local_desired_vel.xyz.z));
+		ret = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + packet_size + header_bytes, &objp->phys_info, &local_desired_vel);
 
 		packet_size += ret;
 	}
@@ -1743,7 +1744,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 		vec3d local_desired_vel = vmd_zero_vector;
 
-		ubyte r6 = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + offset, &pobjp->phys_info, local_desired_vel);
+		ubyte r6 = multi_pack_unpack_desired_vel_and_desired_rotvel(0, data + offset, &pobjp->phys_info, &local_desired_vel);
 		mprintf(("desired velocity %f %f %f", local_desired_vel.xyz.x, local_desired_vel.xyz.y, local_desired_vel.xyz.z));
 		offset += r6;
 		// change it back to global coordinates.
@@ -3167,8 +3168,9 @@ void multi_oo_interp(object* objp)
 	}
 
 	// duplicate the rest of the physics engine's calls here to make the simulation more exact.
-	objp->phys_info.speed = vm_vec_mag(&objp->phys_info.vel);							
+	objp->phys_info.speed = vm_vec_mag(&objp->phys_info.vel);
 	objp->phys_info.fspeed = vm_vec_dot(&objp->orient.vec.fvec, &objp->phys_info.vel);
+	mprintf(("Fso calculated a speed of %f, and forward speed %f\n", objp->phys_info.speed, objp->phys_info.fspeed));
 
 }
 
