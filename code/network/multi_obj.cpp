@@ -190,7 +190,7 @@ bool Afterburn_hack = false;			// HACK!!!
 #define OOC_INDEX_NULLPTR_SUBSYSEM			255			// If a lock has a nullptr subsystem, send this as the invalid index.
 #define OOC_MAX_LOCKS							375			// Because of limited packet size, this is approximately the safe maximum of locks. 
 
-void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info);
+void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info *new_phys_info);
 
 
 
@@ -836,7 +836,7 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 
 	Oo_info.frame_info[net_sig].death_or_depart_frame = -1;
 
-	for (auto player_record : Oo_info.player_frame_info) {
+	for (auto & player_record : Oo_info.player_frame_info) {
 		player_record.last_sent[net_sig].timestamp = -1;
 		player_record.last_sent[net_sig].position = vmd_zero_vector;
 		player_record.last_sent[net_sig].hull = -1.0f;
@@ -861,7 +861,7 @@ void multi_oo_respawn_reset_info(ushort net_sig) {
 	interp->prev_pos_comparison_frame = -MAX_FRAMES_RECORDED;
 	interp->hull_comparison_frame = -MAX_FRAMES_RECORDED;
 	interp->shields_comparison_frame = -MAX_FRAMES_RECORDED;
-		for (auto subsys : interp->subsystems_comparison_frame ){
+		for (auto & subsys : interp->subsystems_comparison_frame ){
 			subsys = -MAX_FRAMES_RECORDED; // ship adder recreates the vector entries
 		}
 
@@ -2683,7 +2683,7 @@ void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new
 
 		// now we'll update the interpolation splines if both points have been set.
 		if ( Oo_info.interp[net_sig_idx].prev_pack_pos_frame > -1) {
-			multi_oo_calc_interp_splines(objp, new_pos, new_ori_mat, new_phys_info);
+			multi_oo_calc_interp_splines(objp, new_ori_mat, new_phys_info);
 		}
 	}
 }
@@ -3172,7 +3172,7 @@ void multi_oo_interp(object* objp)
 
 }
 
-void multi_oo_calc_interp_splines(object* objp, vec3d *new_pos, matrix *new_orient, physics_info *new_phys_info)
+void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info *new_phys_info)
 {
 	Assert(objp != nullptr);
 
