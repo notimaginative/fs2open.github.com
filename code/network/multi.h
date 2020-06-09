@@ -192,9 +192,10 @@ class player;
 #define OPTIONS_UPDATE				0x28		// options (netgame or local) update packet
 #define CLIENT_UPDATE				0x29		// sent from server to client periodically to update important info (pause status, etc)
 #define CD_VERIFY						0x2A		// cd verification update
-#define LINEAR_WEAPON_FIRED			0x2B		// for firing of non-homing weapons Cyborg17 - was previously the Primary_fired_new packet
+#define PRIMARY_FIRED_NEW			0x2B		// For firing new primary toao of doom
 #define COUNTERMEASURE_NEW			0x2C		// for client-side firing
 #define EVENT_UPDATE					0x2D		// event change
+#define LINEAR_WEAPON_FIRED			0x2E		//  Cyborg17 - for firing of non-homing weapons from the player on a client to send to the server
 
 #define SECONDARY_FIRED_AI			0xA0		// fired a secondary weapon (ai ship)
 #define SECONDARY_FIRED_PLR		0xA1		// fired a secondary weapon (player ship)

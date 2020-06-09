@@ -11520,7 +11520,7 @@ int ship_fire_primary(object * obj, int stream_weapons, int force, bool rollback
 	if(Game_mode & GM_MULTIPLAYER){
 		// if I'm a Host send a primary fired packet packet if it's brand new
 		if(MULTIPLAYER_MASTER && !rollback_shot) {
-		send_non_homing_fired_packet(shipp, banks_fired);
+			send_NEW_primary_fired_packet(shipp, banks_fired);
 		// or if I'm a client, and it is my ship send it for rollback on the server.
 		} else if (MULTIPLAYER_CLIENT && (shipp == Player_ship)) {
 				send_non_homing_fired_packet(shipp, banks_fired);
