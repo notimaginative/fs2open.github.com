@@ -855,6 +855,10 @@ void process_packet_normal(ubyte* data, header *header_info)
 			process_reinforcement_avail( data, header_info );
 			break;
 
+		case PRIMARY_FIRED_NEW:
+			process_NEW_primary_fired_packet(data, header_info);
+			break;
+
 		case LINEAR_WEAPON_FIRED:
 			process_non_homing_fired_packet(data, header_info);
 			break;
