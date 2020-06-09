@@ -7492,7 +7492,7 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 	ubyte data[MAX_PACKET_SIZE];
 	object *objp;	
 	int np_index;
-	net_player *ignore = NULL;
+	net_player *ignore = nullptr;
 
 	// get an object pointer for this ship.
 	objnum = shipp->objnum;
@@ -7548,7 +7548,7 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 
 	// find the object this fired packet is operating on
 	objp = multi_get_network_object( shooter_sig );
-	if ( objp == NULL ) {
+	if ( objp == nullptr ) {
 		nprintf(("Network", "Could not find ship for fire primary packet NEW!\n"));
 		return;
 	}
@@ -7563,7 +7563,7 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 	shipp = &Ships[objp->instance];
 
 	// if we're in client firing mode, ignore ones for myself	
-	if((Player_obj != NULL) && (Player_obj == objp)){		
+	if((Player_obj != nullptr) && (Player_obj == objp)){		
 		return;
 	}
 
@@ -7594,10 +7594,11 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	ubyte data[MAX_PACKET_SIZE], flags = 0; // ubanks_fired, current_bank;
 	object* objp;
 	int np_index;
-	net_player* ignore = NULL;
+	net_player* ignore = nullptr;
 
 	// just in case nothing got fired
 	if (banks_or_number_of_missiles_fired <= 0) {
+		mprintf(("Exit 1\n"));
 		return;
 	}
 
@@ -7614,6 +7615,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	// If I'm a multiplayer client, I should never send primary fired packets for anyone except me
 	if (Player_obj != objp) {
+		mprintf(("Exit 2\n"));
 		return;
 	}
 
@@ -7697,12 +7699,14 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 
 	// find the object this fired packet is operating on
 	objp = multi_get_network_object(shooter_sig);
-	if (objp == NULL) {
+	if (objp == nullptr) {
+		
 		nprintf(("Network", "Could not find ship for fire primary packet NEW!\n"));
 		return;
 	}
 	// if this object is not actually a valid ship, don't do anything
 	if (objp->type != OBJ_SHIP) {
+
 		return;
 	}
 	// Juke - also check (objp->instance >= MAX_SHIPS)
