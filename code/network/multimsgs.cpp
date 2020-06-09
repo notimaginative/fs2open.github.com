@@ -7488,7 +7488,7 @@ void process_reinforcement_avail( ubyte *data, header *hinfo )
 void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 {
 	int packet_size, objnum;
-	ubyte data[MAX_PACKET_SIZE]; // ubanks_fired, current_bank;
+	ubyte data[MAX_PACKET_SIZE];
 	object *objp;	
 	int np_index;
 	net_player *ignore = NULL;
@@ -7497,8 +7497,9 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 	objnum = shipp->objnum;
 	objp = &Objects[objnum];
 
-	// if i'm a multiplayer client, I should never send primary fired packets for anyone except me
-	if(MULTIPLAYER_CLIENT && (Player_obj != objp)){
+	Assertion(MULTIPLAYER_MASTER, "Client accessed a server only packet send_NEW_primary_fired_packet. \n\nThis is a coder error, please report!");
+	// if i'm a multiplayer client, I should never send primary fired packets
+	if(MULTIPLAYER_CLIENT){
 		return;
 	}
 
@@ -7507,11 +7508,9 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 		return;
 	}
 
-	if(MULTIPLAYER_MASTER){
-		np_index = multi_find_player_by_net_signature(objp->net_signature);
-		if((np_index >= 0) && (np_index < MAX_PLAYERS)){
-			ignore = &Net_players[np_index];
-		}
+	np_index = multi_find_player_by_net_signature(objp->net_signature);
+	if((np_index >= 0) && (np_index < MAX_PLAYERS)){
+		ignore = &Net_players[np_index];
 	}
 
 	// build up the standard weapon fired packet.  This packet will get sent to all players if an AI
@@ -7520,7 +7519,6 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 	// and server in sync w.r.t. weapon energy for player ship
 	BUILD_HEADER( PRIMARY_FIRED_NEW );
 	ADD_USHORT(objp->net_signature);
-	// ADD_DATA(ubanks_fired);
 
 	// if I'm a server, broadcast to all players
 	if(MULTIPLAYER_MASTER){		
@@ -7537,8 +7535,7 @@ void send_NEW_primary_fired_packet(ship *shipp, int banks_fired)
 
 void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 {
-	int offset; // linked;	
-				// ubyte banks_fired, current_bank;
+	int offset; 
 	object* objp;	
 	ship *shipp;
 	ushort shooter_sig;	
@@ -7546,7 +7543,6 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 	// read all packet info
 	offset = HEADER_LENGTH;
 	GET_USHORT(shooter_sig);
-	// GET_DATA(banks_fired);
 	PACKET_SET_SIZE();
 
 	// find the object this fired packet is operating on
@@ -7585,11 +7581,9 @@ void process_NEW_primary_fired_packet(ubyte *data, header *hinfo)
 	}
 }
 
-const int NON_HOMING_PACKET_ROLLBACK				= (1 << 0);
-const int NON_HOMING_PACKET_MISSILE					= (1 << 1);
-const int NON_HOMING_PACKET_LINKED_PRIMARIES		= (1 << 2);
-const int NON_HOMING_PACKET_DOUBLE_FIRE_SECONDARIES = (1 << 3);
-
+const int NON_HOMING_PACKET_MISSILE					= (1 << 0);
+const int NON_HOMING_PACKET_LINKED_PRIMARIES		= (1 << 1);
+const int NON_HOMING_PACKET_DOUBLE_FIRE_SECONDARIES = (1 << 2);
 
 void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_fired, bool secondary)
 {
@@ -7597,7 +7591,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	int packet_size, objnum;
 	ubyte data[MAX_PACKET_SIZE], flags = 0; // ubanks_fired, current_bank;
-	object* objp;	
+	object* objp;
 	int np_index;
 	net_player* ignore = NULL;
 
@@ -7606,14 +7600,11 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 		return;
 	}
 
-	// Cyborg17 - new variables for physics calcs to send to server if client
+	// Cyborg17 - new variables for physics calcs to send to server
 	ubyte time_elapsed;
 	ushort last_received_frame, ref_obj_netsig;
 	angles adjustment_angles, player_ship_angles;
-	vec3d temp_vec, ref_to_ship_vec;
-
-	// Cyborg17 - and corresponding pointers
-	vec3d ship_pos, ref_pos;
+	vec3d temp_vec, ref_to_ship_vec, ship_pos, ref_pos;
 	matrix ship_ori, ref_ori;
 
 	// get an object pointer for this ship.
@@ -7621,108 +7612,80 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	objp = &Objects[objnum];
 
 	// If I'm a multiplayer client, I should never send primary fired packets for anyone except me
-	if (MULTIPLAYER_CLIENT) {
-		if (Player_obj != objp){
-			return;
-		}
-		
-		// Cyborg17 -- and if I am a client, let's send the relative position of my fire 
-		// to my current target as well as the frametime.
-		// The whole goal of this is to create the weapon on the server that is
-		// heading at your target in the same exact way that it is on the client.
-		object* temp_objp = multi_get_network_object(multi_client_lookup_ref_obj_net_sig());
-		// Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");  //temp remove this because we need to test other things for now.
-		if (temp_objp == nullptr) {
-			mprintf(("Client is unable to get accurate reference object.\n"));
-			return;
-		}
-
-		// make sure the other computer knows this is a rollback instruction packet, and what it will need to fire.
-		flags |= NON_HOMING_PACKET_ROLLBACK;
-
-		if (secondary) {
-			flags |= NON_HOMING_PACKET_MISSILE;
-		}
-
-		ref_pos = temp_objp->pos;
-		ref_ori = temp_objp->orient;
-		ref_obj_netsig = temp_objp->net_signature;
-
-		ship_pos = objp->pos;
-		ship_ori = objp->orient;
-
-		// Find the vector between the two objects
-		vm_vec_sub(&ref_to_ship_vec, &ship_pos, &ref_pos);
-
-		temp_vec = ref_to_ship_vec;
-			
-		// Normalize and unrotate via transposed matrix
-		// Save the transposed matrix so that we can optimize and use it twice.
-		vm_transpose(&ref_ori);
-		
-		// This is an "unrotate", because the matrix has already been transposed.  
-		// This finalized the relative position we will send to the server. 
-		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &ref_ori);
-
-		// Save on bandwidth by changing to angles.
-		vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
-		vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
-		vm_extract_angles_matrix_alternate(&player_ship_angles, &ship_ori);
-
-
-		// And we need the time too, so send the last frame we got from the server and how much time has happened since then.
-		last_received_frame = multi_client_lookup_frame_idx();
-		time_elapsed = (ubyte)(timestamp() - multi_client_lookup_frame_timestamp());
+	if (Player_obj != objp) {
+		return;
 	}
 
-	if(MULTIPLAYER_MASTER){
-		np_index = multi_find_player_by_net_signature(objp->net_signature);
-		if((np_index >= 0) && (np_index < MAX_PLAYERS)){
-			ignore = &Net_players[np_index];
-		}
+	// Cyborg17 -- and if I am a client, let's send the relative position of my fire 
+	// to my current target as well as the frametime.
+	// The whole goal of this is to create the weapon on the server that is
+	// heading at your target in the same exact way that it is on the client.
+	object* temp_objp = multi_get_network_object(multi_client_lookup_ref_obj_net_sig());
+	// Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");  //temp remove this because we need to test other things for now.
+	if (temp_objp == nullptr) {
+		mprintf(("Client is unable to get accurate reference object.\n")); // TODO: send "regular packet instead"
+		return;
 	}
+
+	if (secondary) {
+		flags |= NON_HOMING_PACKET_MISSILE;
+	}
+
+	ref_pos = temp_objp->pos;
+	ref_ori = temp_objp->orient;
+	ref_obj_netsig = temp_objp->net_signature;
+
+	ship_pos = objp->pos;
+	ship_ori = objp->orient;
+
+	// Find the vector between the two objects
+	vm_vec_sub(&ref_to_ship_vec, &ship_pos, &ref_pos);
+
+	temp_vec = ref_to_ship_vec;
+
+	// Save the transposed matrix so that we can optimize and use it twice.
+	vm_transpose(&ref_ori);
+
+	// Normalize and unrotate via transposed matrix
+	// This is an "unrotate", because the matrix has already been transposed.  
+	// This finalized the relative position we will send to the server. 
+	vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &ref_ori);
+
+	// Save on bandwidth by changing to angles.
+	vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
+	vm_extract_angles_matrix_alternate(&player_ship_angles, &ship_ori);
+
+	// And we need the time too, so send the last frame we got from the server and how much time has happened since then.
+	last_received_frame = multi_client_lookup_frame_idx();
+	time_elapsed = (ubyte)(timestamp() - multi_client_lookup_frame_timestamp());
 
 	// build up the standard weapon fired packet.  This packet will get sent to all players if an AI
 	// ship fired the primary weapons.  If a player fired the weapon, then this packet will get sent
 	// to every player but the guy who actullly fired the weapon.  This method is used to help keep client
 	// and server in sync w.r.t. weapon energy for player ship
-	BUILD_HEADER( LINEAR_WEAPON_FIRED );
+	BUILD_HEADER(LINEAR_WEAPON_FIRED);
 	ADD_USHORT(objp->net_signature);
 	ADD_DATA(flags);
+	ADD_USHORT(ref_obj_netsig);
+	ADD_USHORT(last_received_frame);
+	ADD_DATA(time_elapsed);
+	ADD_VECTOR(ref_to_ship_vec);
+	ADD_FLOAT(adjustment_angles.b);
+	ADD_FLOAT(adjustment_angles.h);
+	ADD_FLOAT(adjustment_angles.p);
+	ADD_FLOAT(player_ship_angles.b);
+	ADD_FLOAT(player_ship_angles.h);
+	ADD_FLOAT(player_ship_angles.p);
 
-	if (MULTIPLAYER_CLIENT) {
-		ADD_USHORT(ref_obj_netsig);
-		ADD_USHORT(last_received_frame);
-		ADD_DATA(time_elapsed);
-		ADD_VECTOR(ref_to_ship_vec);
-		ADD_FLOAT(adjustment_angles.b);
-		ADD_FLOAT(adjustment_angles.h);
-		ADD_FLOAT(adjustment_angles.p);
-		ADD_FLOAT(player_ship_angles.b);
-		ADD_FLOAT(player_ship_angles.h);
-		ADD_FLOAT(player_ship_angles.p);
-
-	}
-	
-	// if I'm a server, broadcast to all players
-	if(MULTIPLAYER_MASTER){		
-		multi_io_send_to_all(data, packet_size, ignore);
-
-		// TEST CODE
-		multi_rate_add(1, "wfi", packet_size);
-	}
-	// otherwise just send to the server
-	else {
-		multi_io_send(Net_player, data, packet_size);		
-	}
+	multi_io_send(Net_player, data, packet_size);
 }
 
-void process_non_homing_fired_packet(ubyte *data, header *hinfo)
+void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 {
 	int offset; // linked;	
-	object* objp;	
-	ship *shipp;
-	ushort shooter_sig;	
+	object* objp;
+	ship* shipp;
+	ushort shooter_sig;
 	ubyte flags;
 	bool secondary = false;
 
@@ -7731,137 +7694,117 @@ void process_non_homing_fired_packet(ubyte *data, header *hinfo)
 	GET_USHORT(shooter_sig);
 	GET_DATA(flags);
 
-	if (MULTIPLAYER_CLIENT) {
-		PACKET_SET_SIZE();
-	}
-
 	// find the object this fired packet is operating on
-	objp = multi_get_network_object( shooter_sig );
-	if ( objp == NULL ) {
+	objp = multi_get_network_object(shooter_sig);
+	if (objp == NULL) {
 		nprintf(("Network", "Could not find ship for fire primary packet NEW!\n"));
 		return;
 	}
 	// if this object is not actually a valid ship, don't do anything
-	if(objp->type != OBJ_SHIP){
+	if (objp->type != OBJ_SHIP) {
 		return;
 	}
 	// Juke - also check (objp->instance >= MAX_SHIPS)
-	if(objp->instance < 0 || objp->instance >= MAX_SHIPS){
+	if (objp->instance < 0 || objp->instance >= MAX_SHIPS) {
 		return;
 	}
 	shipp = &Ships[objp->instance];
 
-	// if we're in client firing mode, ignore ones for myself	
-	if((Player_obj != NULL) && (Player_obj == objp)){		
-		return;
-	}
-
 	if (flags & NON_HOMING_PACKET_MISSILE) {
 		secondary = true;
 	}
+	ubyte time_elapsed;
+	ushort target_ref, client_frame;
+	int frame, time_after_frame;
+	angles adjustment_angles, player_ship_angles;
 
-	// Cyborg17 - Now let's process the physics info from the client
-	if (MULTIPLAYER_MASTER) {
+	vec3d ref_to_ship_vec, new_ship_pos, new_tar_pos, temp_vec;
+	matrix new_ship_ori, new_tar_ori, adjust_ship_matrix, old_player_ori;
 
-		ubyte time_elapsed;
-		ushort target_ref, client_frame;
-		int frame, time_after_frame;
-		angles adjustment_angles, player_ship_angles;
-		
-		vec3d ref_to_ship_vec, new_ship_pos, new_tar_pos, temp_vec;
-		matrix new_ship_ori, new_tar_ori, adjust_ship_matrix, old_player_ori;
-		
-		//pointers
-		object* objp_ref;
+	//pointers
+	object* objp_ref;
 
-		//finish processing the packet 
-		GET_USHORT(target_ref);
-		GET_USHORT(client_frame);
-		GET_DATA(time_elapsed);
-		GET_VECTOR(ref_to_ship_vec);
-		GET_FLOAT(adjustment_angles.b);
-		GET_FLOAT(adjustment_angles.h);
-		GET_FLOAT(adjustment_angles.p); 
-		GET_FLOAT(player_ship_angles.b);
-		GET_FLOAT(player_ship_angles.h);
-		GET_FLOAT(player_ship_angles.p); 
+	//finish processing the packet 
+	GET_USHORT(target_ref);
+	GET_USHORT(client_frame);
+	GET_DATA(time_elapsed);
+	GET_VECTOR(ref_to_ship_vec);
+	GET_FLOAT(adjustment_angles.b);
+	GET_FLOAT(adjustment_angles.h);
+	GET_FLOAT(adjustment_angles.p);
+	GET_FLOAT(player_ship_angles.b);
+	GET_FLOAT(player_ship_angles.h);
+	GET_FLOAT(player_ship_angles.p);
 
-		PACKET_SET_SIZE();
+	PACKET_SET_SIZE();
 
-//		mprintf(("\nServer Net_signature %d ref_obj_netsig %d last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, client_frame, time_elapsed));
+	//		mprintf(("\nServer Net_signature %d ref_obj_netsig %d last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, client_frame, time_elapsed));
 
-		objp_ref = multi_get_network_object(target_ref);
+	objp_ref = multi_get_network_object(target_ref);
 
-		if (objp_ref == nullptr) {
-			// new way failed, use the old new way.
-			if (secondary) {
-				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
-				// rollback shot so the client doesn't get an extra shot.
-				ship_fire_secondary(objp, 0, true);
-			} else { 
-				ship_fire_primary(objp, 0, 1);
-			}
-			return;
-		}
-		
-		// figure out correct start frame and wrap
-		ushort wrap = multi_ship_record_calculate_wrap(client_frame);
-		frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
-
-		if (frame > -1) {
-			// make sure that record we would access is from this ship!
-		//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
-		//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
-		//		return;
-		//	}	
-
-			// adjust time so that we can interpolate the position and orientation that was seen on the client.
-			time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
-
-			Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
-
-			new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
-			new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
-			// find out where the angle to the new primary fire should be, by
-			// rotating the vector
-
-			temp_vec = ref_to_ship_vec;
-
-			// figure out the new position for the firing ship.
-			vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
-			// Finish finding the shot's starting position	
-			vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
-			// "decompress" the orientation matrix from the packet's angles.
-			vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
-			vm_angles_2_matrix(&old_player_ori, &player_ship_angles);
-
-			// Now multiply the two matrices for the orientation of the weapon.
-			vm_matrix_x_matrix(&new_ship_ori, &new_tar_ori, &adjust_ship_matrix);
-			vm_orthogonalize_matrix(&new_ship_ori);
-			vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
-			multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
-
-		} else {
-		// if the new way fails for some reason, use the old way.
-			nprintf(("Network","Rollback was not performed because the frame sent by the client is either too old or invalid.. Using the old system.\n"));
-			if (secondary) {
-				// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
-				// rollback shot so the client doesn't get an extra shot.
-				ship_fire_secondary(objp, 0, true);
-			} else { 
-				ship_fire_primary(objp, 0, 1);
-			}		
-		}
-	}
-
-	// Cyborg17 - For now, clients are still using old fire packets from the server, the old way
-	if (MULTIPLAYER_CLIENT) {
+	if (objp_ref == nullptr) {
+		// new way failed, use the old new way.
 		if (secondary) {
-			ship_fire_secondary(objp);
-		} else { 
+			// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
+			// rollback shot so the client doesn't get an extra shot.
+			ship_fire_secondary(objp, 0, true);
+		}
+		else {
 			ship_fire_primary(objp, 0, 1);
 		}
-	}	
+		return;
+	}
+
+	// figure out correct start frame and wrap
+	ushort wrap = multi_ship_record_calculate_wrap(client_frame);
+	frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
+
+	if (frame > -1) {
+		// make sure that record we would access is from this ship!
+	//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
+	//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
+	//		return;
+	//	}	
+
+		// adjust time so that we can interpolate the position and orientation that was seen on the client.
+		time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
+
+		Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
+
+		new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
+		new_tar_ori = multi_ship_record_lookup_orientation(objp_ref, frame);
+		// find out where the angle to the new primary fire should be, by
+		// rotating the vector
+
+		temp_vec = ref_to_ship_vec;
+
+		// figure out the new position for the firing ship.
+		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
+		// Finish finding the shot's starting position	
+		vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
+		// "decompress" the orientation matrix from the packet's angles.
+		vm_angles_2_matrix(&adjust_ship_matrix, &adjustment_angles);
+		vm_angles_2_matrix(&old_player_ori, &player_ship_angles);
+
+		// Now multiply the two matrices for the orientation of the weapon.
+		vm_matrix_x_matrix(&new_ship_ori, &new_tar_ori, &adjust_ship_matrix);
+		vm_orthogonalize_matrix(&new_ship_ori);
+		vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
+		multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
+
+	}
+	else {
+		// if the new way fails for some reason, use the old way.
+		nprintf(("Network", "Rollback was not performed because the frame sent by the client is either too old or invalid.. Using the old system.\n"));
+		if (secondary) {
+			// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 
+			// rollback shot so the client doesn't get an extra shot.
+			ship_fire_secondary(objp, 0, true);
+		}
+		else {
+			ship_fire_primary(objp, 0, 1);
+		}
+	}
 }
 
 void send_NEW_countermeasure_fired_packet(object *objp, int cmeasure_count, int rand_val)
