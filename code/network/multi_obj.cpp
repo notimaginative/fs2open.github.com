@@ -623,11 +623,16 @@ void multi_ship_record_do_rollback() {
 		net_sig_idx = objp->net_signature;
 
 		// this should not happen, but it would not access correct info. 
-		//It only means a less accurate simulation (and a mystery), not a crash. So, write to the log. 
+		//It only means a less accurate simulation (and a mystery), not a crash. So, for now, write to the log. 
 		if (net_sig_idx < 1) {
+			mprintf(("Rollback ship does not have a net signature.  Someone should probably investigate this at some point.\n"));
 			continue;
 		}
 
+		// also, we must *not* attempt to rollback the standalone ship 
+		if (net_sig_idx == STANDALONE_SHIP_SIG) {
+			continue;
+		}
 
 		Oo_info.rollback_ships.push_back(objp);
 
