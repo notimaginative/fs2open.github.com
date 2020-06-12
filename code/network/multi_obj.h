@@ -76,9 +76,6 @@ uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 
 int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
-// Creates a weapon and adds it to the Frame Records so that we can  
-void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary);
-
 // This stores the information we got from the client to create later, and checks to see if this is the oldest shot we are going to fire during rollback.
 void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary);
 

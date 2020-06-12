@@ -7593,7 +7593,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	int packet_size, objnum;
 	ubyte data[MAX_PACKET_SIZE], flags = 0; // ubanks_fired, current_bank;
 	object* objp;
-	int np_index;
 	net_player* ignore = nullptr;
 
 	// just in case nothing got fired
@@ -7606,7 +7605,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	ubyte time_elapsed;
 	ushort last_received_frame, ref_obj_netsig;
 	angles adjustment_angles, player_ship_angles;
-	vec3d temp_vec, ref_to_ship_vec, ship_pos, ref_pos;
+	vec3d ref_to_ship_vec, ship_pos, ref_pos;
 	matrix ship_ori, ref_ori;
 
 	// get an object pointer for this ship.
@@ -7623,9 +7622,9 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	// to my current target as well as the frametime.
 	// The whole goal of this is to create the weapon on the server that is
 	// heading at your target in the same exact way that it is on the client.
-	object* temp_objp = multi_get_network_object(multi_client_lookup_ref_obj_net_sig());
-	// Assertion(temp_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");  //temp remove this because we need to test other things for now.
-	if (temp_objp == nullptr) {
+	object* ref_objp = multi_get_network_object(multi_client_lookup_ref_obj_net_sig());
+	// Assertion(ref_objp != nullptr, "Temp_obj in the new primary packet returned a nullptr, try again!");  //temp remove this because we need to test other things for now.
+	if (ref_objp == nullptr) {
 		mprintf(("Client is unable to get accurate reference object.\n")); // TODO: send "regular packet instead"
 		return;
 	}
@@ -7634,25 +7633,21 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 		flags |= NON_HOMING_PACKET_MISSILE;
 	}
 
-	ref_pos = temp_objp->pos;
-	ref_ori = temp_objp->orient;
-	ref_obj_netsig = temp_objp->net_signature;
+	ref_pos = ref_objp->pos;
+	ref_ori = ref_objp->orient;
+	ref_obj_netsig = ref_objp->net_signature;
 
 	ship_pos = objp->pos;
 	ship_ori = objp->orient;
 
-	// Find the vector between the two objects
-	vm_vec_sub(&ref_to_ship_vec, &ship_pos, &ref_pos);
-
-	temp_vec = ref_to_ship_vec;
-
 	// Save the transposed matrix so that we can optimize and use it twice.
 	vm_transpose(&ref_ori);
+	// Find the vector between the two objects and normalize.
+	float distance = vm_vec_normalized_dir(&ref_to_ship_vec, &ship_pos, &ref_pos);
 
-	// Normalize and unrotate via transposed matrix
+	// unrotate via transposed matrix
 	// This is an "unrotate", because the matrix has already been transposed.  
 	// This finalized the relative position we will send to the server. 
-	vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &ref_ori);
 
 	// Save on bandwidth by changing to angles.
 	vm_extract_angles_matrix_alternate(&adjustment_angles, &ref_ori);
@@ -7680,6 +7675,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	ADD_FLOAT(player_ship_angles.b);
 	ADD_FLOAT(player_ship_angles.h);
 	ADD_FLOAT(player_ship_angles.p);
+	ADD_FLOAT(distance);
 
 	multi_io_send(Net_player, data, packet_size);
 }
@@ -7724,6 +7720,7 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 	ushort target_ref, client_frame;
 	int frame, time_after_frame;
 	angles adjustment_angles, player_ship_angles;
+	float distance;
 
 	vec3d ref_to_ship_vec, new_ship_pos, new_tar_pos, temp_vec;
 	matrix new_ship_ori, new_tar_ori, adjust_ship_matrix, old_player_ori;
@@ -7742,6 +7739,7 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 	GET_FLOAT(player_ship_angles.b);
 	GET_FLOAT(player_ship_angles.h);
 	GET_FLOAT(player_ship_angles.p);
+	GET_FLOAT(distance);
 
 	PACKET_SET_SIZE();
 
@@ -7788,6 +7786,9 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 
 		// figure out the new position for the firing ship.
 		vm_vec_rotate(&ref_to_ship_vec, &temp_vec, &new_tar_ori);
+
+		// multiplay the distance back in
+		vm_vec_scale(&ref_to_ship_vec, distance);
 		// Finish finding the shot's starting position	
 		vm_vec_add(&new_ship_pos, &ref_to_ship_vec, &new_tar_pos);
 		// "decompress" the orientation matrix from the packet's angles.
