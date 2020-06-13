@@ -396,7 +396,7 @@ void multi_ship_record_update_all()
 	for (ship & cur_ship : Ships) {
 		
 		if (cur_ship.objnum == -1) {
-			break;
+			continue;
 		}		
 		
 		objp = &Objects[cur_ship.objnum];
@@ -610,7 +610,7 @@ void multi_ship_record_do_rollback()
 	if (!Oo_info.rollback_mode) {
 		return;
 	}
-	nprintf(("Network","A multiplayer rollback shot is being simulated.\n"));
+	nprintf(("Network","At least one multiplayer rollback shot is being simulated this frame.\n"));
 	int net_sig_idx;
 	object* objp;
 
