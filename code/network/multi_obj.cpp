@@ -393,7 +393,7 @@ void multi_ship_record_update_all()
 	int net_sig_idx;
 	object* objp;
 
-		for (ship & cur_ship : Ships) {
+	for (ship & cur_ship : Ships) {
 		
 		if (cur_ship.objnum == -1) {
 			break;
@@ -412,8 +412,6 @@ void multi_ship_record_update_all()
 		if (net_sig_idx < SHIP_SIG_MIN || net_sig_idx == STANDALONE_SHIP_SIG || net_sig_idx > SHIP_SIG_MAX) {
 			 continue;
 		}
-
-		 // if they're "dead", recycle their positions.
 
 		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
 		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
@@ -668,7 +666,7 @@ void multi_ship_record_do_rollback()
 	}
 
 	while (frame_idx != Oo_info.cur_frame_index) {
-		if (Oo_info.rollback_shots[frame_idx].size() > 0) {
+		if (Oo_info.rollback_shots_to_be_fired[frame_idx].size() > 0) {
 			break;
 		}
 		frame_idx++;

@@ -7640,12 +7640,14 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 	ship_pos = objp->pos;
 	ship_ori = objp->orient;
 
+	vec3d temp;
 	// Save the transposed matrix so that we can optimize and use it twice.
 	vm_transpose(&ref_ori);
 	// Find the vector between the two objects and normalize.
-	float distance = vm_vec_normalized_dir(&ref_to_ship_vec, &ship_pos, &ref_pos);
+	float distance = vm_vec_normalized_dir(&temp, &ship_pos, &ref_pos);
 
 	// unrotate via transposed matrix
+	vm_vec_rotate(&ref_to_ship_vec, &temp, &ref_ori );
 	// This is an "unrotate", because the matrix has already been transposed.  
 	// This finalized the relative position we will send to the server. 
 
