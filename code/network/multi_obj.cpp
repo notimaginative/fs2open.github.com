@@ -57,7 +57,7 @@ struct oo_info_sent_to_players {
 	vec3d position;					// If they are stationary, there's no need to update their position.
 	float hull;						// no need to send hull if hull hasn't changed.
 
-	// shields are a little special because they are constantly regenerating, so if they are not at full strength we need to send them.
+	// shields are a little special because they are constantly regenerating, so if they are *not* at full strength we need to send them.
 	bool perfect_shields_sent;		
 
 	int ai_mode;
@@ -68,7 +68,7 @@ struct oo_info_sent_to_players {
 };
 
 struct oo_netplayer_records{
-	SCP_vector<oo_info_sent_to_players> last_sent;			// Subcategory of which player did I send this info to?  Corresponds to net_player indeces.
+	SCP_vector<oo_info_sent_to_players> last_sent;			// Subcategory of which player did I send this info to?  Corresponds to net_player index.
 	int player_target_record[MAX_FRAMES_RECORDED];			// For rollback, we need to keep track of the player's targets. Uses frame as its index.
 };
 
@@ -1818,14 +1818,14 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 
 		float temp_distance = vm_vec_dist(&new_pos, &pobjp->pos);
 		
-		// Cyborg17 - fully bash if we're 1) past the position update tolerance, 2) so close it doesn't matter, or 3) not moving
+		// Cyborg17 - fully bash if we're 1) past the position update tolerance or not moving
 		// Past the update tolerance will cause a jump, but it should be nice and smooth immediately afterwards
-		if(pos_new && (temp_distance > OO_POS_UPDATE_TOLERANCE || temp_distance < 0.05f || new_phys_info.vel == vmd_zero_vector)){
+		if(pos_new && (temp_distance > OO_POS_UPDATE_TOLERANCE || new_phys_info.vel == vmd_zero_vector)){
 			pobjp->pos = new_pos;
 			//Also, make sure that FSO knows that it does not need to smooth anything out
 			interp_data->position_error = vmd_zero_vector;
-			// When not bashing, find how much error to smooth out during interpolation.
-		} else {
+		} 	// When not bashing, find how much error to smooth out during interpolation.
+		else {
 			vm_vec_sub(&interp_data->position_error, &new_pos, &pobjp->pos);
 		}
 
@@ -2197,16 +2197,24 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 
 	// reset the timestamp for the next update for this guy
 	multi_oo_reset_timestamp(pl, obj, range, in_cone);
-
+	
 	// position should be almost constant, except for ships that aren't moving.
-	if (Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].position != obj->pos) {
+	if ( (Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].position != obj->pos) && (vm_vec_mag_quick(&obj->phys_info.vel) > 0.0f ) ) {
 		oo_flags |= OO_POS_AND_ORIENT_NEW;
 		// update the last position sent, will be done in each of the cases below.
 		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].position = obj->pos;
 	}   // same with orientation
 	else if (obj->phys_info.rotvel != vmd_zero_vector) {
 		oo_flags |= OO_POS_AND_ORIENT_NEW;
-	}
+	} 	// add info for a targeted object
+	else if((pl->s_info.target_objnum != -1) && (OBJ_INDEX(obj) == pl->s_info.target_objnum)){
+		oo_flags |= OO_POS_AND_ORIENT_NEW;
+	}	// add info which is contingent upon being "in front"			
+	else if(in_cone){
+		oo_flags |= OO_POS_AND_ORIENT_NEW;
+	}						
+		
+
 
 	// if its a small ship, add weapon link info
 	// Cyborg17 - these don't take any extra space because they are part of the flags variable, so it's ok to send them with every packet.
@@ -2278,17 +2286,8 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 	}
 
 
-	// add info for a targeted object
-	if((pl->s_info.target_objnum != -1) && (OBJ_INDEX(obj) == pl->s_info.target_objnum)){
-		oo_flags |= OO_POS_AND_ORIENT_NEW;
-	}
-	// all other cases
-	else {					
-		// add info which is contingent upon being "in front"			
-		if(in_cone){
-			oo_flags |= OO_POS_AND_ORIENT_NEW;
-		}						
-	}		
+
+
 
 	// pack stuff only if we have to 	
 	int packed = multi_oo_pack_data(pl, obj, oo_flags, data);	
@@ -3064,17 +3063,25 @@ void multi_oo_interp(object* objp)
 
 	} // once there are enough data points, we begin interpolating.
 	else {
+		// figure out how much time has passed
+		int temp_numerator = timestamp() - interp_data->pos_timestamp;
 
-		int temp_numerator = timestamp() - interp_data->pos_timestamp + Oo_info.received_frametimes[interp_data->cur_pack_pos_frame];
+		// add the ~1/3 of ping
+		if (MULTIPLAYER_MASTER) {
+			int player_id = multi_find_player_by_net_signature(net_sig_idx);
+			temp_numerator += Net_players[player_id].s_info.ping.ping_avg / 3;
+		}
+		else {
+			temp_numerator += Net_players[0].s_info.ping.ping_avg / 3;
+		}
 
-		// Calculate how much time has passed to see if we're about to overshoot the current packet.	
+		// divide in order to 
 		float time_elapsed = i2fl(temp_numerator) / TIMESTAMP_FREQUENCY;
 
 		// Cyborg17 - Here's the new timing calculation: we subtract the last packet's arrival time 
-		// from the current timestamp to see how long it's been and add 1 the frametime from the server, and 
+		// from the current timestamp to see how long it's been and add 1/3 of the current ping, and 
 		// then we divide by the difference in time between the last two packets. This gives us a 
 		// percent that tells us, for example, "35% of the time has elapsed until when we expect the next packet."
-		// adding the 1 frame brings the client simulation closer to the server simulation because of ping
 		float time_factor = (time_elapsed / packet_delta) + 1.0f;
 
 		mprintf(("time_factor was %f\n", time_factor));
@@ -3115,12 +3122,12 @@ void multi_oo_interp(object* objp)
 			float u = (time_factor) / 4.0f;
 			vec3d interp_point;
 			interp_data->pos_spline.bez_get_point(&interp_point, u);
-			// now to "remove" error that the client caused during the last round of interpolation.
-			// Bashing the error would be the alternative to this.
-			if (time_factor < 2.0f) {
-				vec3d remove_error_vector = vmd_zero_vector;
-				float temp_error_factor = time_factor * 0.5f; // .5 and 2 are multiplicative inverses.
-				vm_vec_copy_scale(&remove_error_vector, &interp_data->position_error, temp_error_factor);
+			// now to smooth out the error that the client caused during the last round of interpolation.
+			if ( (time_factor < 2.0f) && (time_factor > 0.0f) && (vm_vec_mag_squared(&interp_data->position_error) > 0.0f) ) {
+				vec3d remove_error_vector;
+				// .5 and 2 are multiplicative inverses. We want all the error gone at time_factor 2.
+				float temp_error_factor = time_factor * 0.5f; 
+				vm_vec_copy_scale(&remove_error_vector, &interp_data->position_error, 1.0f - temp_error_factor);
 				vm_vec_add2(&interp_point, &remove_error_vector);
 			}
 
@@ -3203,23 +3210,22 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	
 	// find the float time version of how much time has passed
 	float delta = multi_oo_calc_pos_time_difference(net_sig_idx);
-	mprintf(("delta was decided as %f\n", delta));
 	// if an error or invalid value, use the local timestamps instead of those received. Should be rare.
 	if (delta <= 0.0f) {
 		delta = float(timestamp() - Oo_info.received_frametimes[Oo_info.interp[net_sig_idx].pos_timestamp]) / 1000.0f;
-		mprintf(("delta was calculated using alternate method, changed to: %f", delta));
+		//mprintf(("delta was calculated using alternate method, changed to: %f", delta));
 	}
+	mprintf(("delta,global velocity,local velocity,local_error,local_new_position,new_position_error,new packet position....%f,", delta));
 
 	Oo_info.interp[net_sig_idx].pos_time_delta = delta;
 
 	// Do the velocity calculation and set it in the physics info.
 	vec3d global_velocity;
-
-	vm_vec_sub(&global_velocity, &Oo_info.interp[net_sig_idx].new_packet_position, &Oo_info.interp[net_sig_idx].old_packet_position);
-	vm_vec_scale(&global_velocity, 1.0f/delta);
-
+	float distance;
+	distance = vm_vec_normalized_dir(&global_velocity, &Oo_info.interp[net_sig_idx].new_packet_position, &Oo_info.interp[net_sig_idx].old_packet_position);
+	
 	// Get rid of any rubberbanding here
-	if (vm_vec_mag_squared(&global_velocity) >= 0.0f) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
+	if (distance >= 0.0f) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
 
 		vec3d local_error, local_vel, local_new_position;
 
@@ -3229,34 +3235,37 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 		vm_vec_unrotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
 		// change last received position to local coordinates.
 		vm_vec_unrotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_packet_position, new_orient);
-		mprintf(("global velocity:\n %f, %f, %f\nlocal velocity:\n %f, %f, %f\nlocal_error\n %f, %f, %f\nlocal_new_position %f, %f, %f\n",global_velocity.xyz.x,global_velocity.xyz.y,global_velocity.xyz.z, local_vel.xyz.x, local_vel.xyz.y, local_vel.xyz.z, local_error.xyz.x, local_error.xyz.y, local_error.xyz.z, local_new_position.xyz.x, local_new_position.xyz.y, local_new_position.xyz.z));
+		mprintf(("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,",global_velocity.xyz.x,global_velocity.xyz.y,global_velocity.xyz.z, local_vel.xyz.x, local_vel.xyz.y, local_vel.xyz.z, local_error.xyz.x, local_error.xyz.y, local_error.xyz.z, local_new_position.xyz.x, local_new_position.xyz.y, local_new_position.xyz.z));
 		// get rid of rubberbanding for each direction.  If there's any disagreement in the signs, just get rid of it and go with the current ship location.
 		// forward/back.
 		mprintf(("switch 1 "));
+
+		vm_vec_scale(&global_velocity, 1.0f/delta);
+
 		if ( (local_error.xyz.z < 0.0f && local_vel.xyz.z > 0.0f) || (local_error.xyz.z > 0.0f && local_vel.xyz.z < 0.0f) ) {			
 			local_error.xyz.z = 0.0f;						// Get rid of error factor
-			mprintf(("true "));
+			mprintf(("true,"));
 		}
 		else {
-			mprintf(("false "));
+			mprintf(("false,"));
 
 		}
 		// up/down
 		if ( (local_error.xyz.y < 0.0f && local_vel.xyz.y > 0.0f) || (local_error.xyz.y > 0.0f && local_vel.xyz.y < 0.0f) ) {
-			local_error.xyz.y = 0.0f;		mprintf(("2 true"));
+			local_error.xyz.y = 0.0f;		mprintf(("2 true,"));
 
 		}
 		else {
-			mprintf(("2 false "));
+			mprintf(("2 false,"));
 
 		}
 		// left/right
 		if ( (local_error.xyz.x < 0.0f && local_vel.xyz.x > 0.0f) || (local_error.xyz.x > 0.0f && local_vel.xyz.x < 0.0f) ) {
-			local_error.xyz.x = 0.0f; 		mprintf(("3 true"));
+			local_error.xyz.x = 0.0f; 		mprintf(("3 true,"));
 
 		}
 		else {
-			mprintf(("false\n"));
+			mprintf(("false,"));
 
 		}
 
@@ -3269,11 +3278,11 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
 
 		}
-		mprintf(("new_position_error %f %f %f\n", Oo_info.interp[net_sig_idx].position_error.xyz.x, Oo_info.interp[net_sig_idx].position_error.xyz.y, Oo_info.interp[net_sig_idx].position_error.xyz.z));
+		mprintf(("%f,%f,%f,", Oo_info.interp[net_sig_idx].position_error.xyz.x, Oo_info.interp[net_sig_idx].position_error.xyz.y, Oo_info.interp[net_sig_idx].position_error.xyz.z));
 
 		// store "new_point"
 		vm_vec_rotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
-		mprintf(("new packet position.... %f %f %f\n", Oo_info.interp[net_sig_idx].new_packet_position.xyz.x, Oo_info.interp[net_sig_idx].new_packet_position.xyz.y, Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
+		mprintf(("%f,%f,%f\n", Oo_info.interp[net_sig_idx].new_packet_position.xyz.x, Oo_info.interp[net_sig_idx].new_packet_position.xyz.y, Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
 	}
 
 	// get the spline representing where this new point tells us we'd be heading
