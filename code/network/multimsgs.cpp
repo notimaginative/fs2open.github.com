@@ -7597,7 +7597,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	// just in case nothing got fired
 	if (banks_or_number_of_missiles_fired <= 0) {
-		mprintf(("Exit 1\n"));
 		return;
 	}
 
@@ -7614,7 +7613,6 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	// If I'm a multiplayer client, I should never send primary fired packets for anyone except me
 	if (Player_obj != objp) {
-		mprintf(("Exit 2\n"));
 		return;
 	}
 
@@ -7699,18 +7697,15 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 	// find the object this fired packet is operating on
 	objp = multi_get_network_object(shooter_sig);
 	if (objp == nullptr) {
-		mprintf(("..Exit 1\n"));
 		nprintf(("Network", "Could not find ship for fire primary packet NEW!\n"));
 		return;
 	}
 	// if this object is not actually a valid ship, don't do anything
 	if (objp->type != OBJ_SHIP) {
-		mprintf(("..Exit 2\n"));
 		return;
 	}
 	// Juke - also check (objp->instance >= MAX_SHIPS)
 	if (objp->instance < 0 || objp->instance >= MAX_SHIPS) {
-		mprintf(("Exit 3\n"));
 		return;
 	}
 	shipp = &Ships[objp->instance];
@@ -7759,7 +7754,6 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 		else {
 			ship_fire_primary(objp, 0, 1);
 		}
-		mprintf(("..Exit 4\n"));
 		return;
 	}
 
@@ -7776,7 +7770,6 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 
 		// adjust time so that we can interpolate the position and orientation that was seen on the client.
 		time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
-		mprintf(("..Success!\n"));
 		Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
 
 		new_tar_pos = multi_ship_record_lookup_position(objp_ref, frame);
@@ -7803,10 +7796,8 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 		vm_matrix_x_matrix(&adjust_ship_matrix, &old_player_ori, &new_ship_ori);
 		multi_ship_record_add_rollback_shot(objp, &new_ship_pos, &adjust_ship_matrix, frame, secondary);
 
-	}
+	}	// if the new way fails for some reason, use the old way.
 	else {
-		mprintf(("Exit 5\n"));
-		// if the new way fails for some reason, use the old way.
 		nprintf(("Network", "Rollback was not performed because the frame sent by the client is either too old or invalid.. Using the old system.\n"));
 		if (secondary) {
 			// if this is a rollback shot from a dumbfire secondary, we have to mark this as a 

@@ -1511,11 +1511,8 @@ void obj_move_all(float frametime)
 		if (!(objp->flags[Object::Object_Flags::Immobile] && objp->hull_strength > 0.0f)) {
 			// if this is an object which should be interpolated in multiplayer, do so
 			if (multi_oo_is_interp_object(objp)) {
-				mprintf(("last position: %f %f %f\n", cur_pos.xyz.x, cur_pos.xyz.y, cur_pos.xyz.z));
-				mprintf(("last globalvel: %f %f %f\n", objp->phys_info.vel.xyz.x, objp->phys_info.vel.xyz.y, objp->phys_info.vel.xyz.z));
+				mprintf(("old position: %f %f %f ", objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z));
 				multi_oo_interp(objp);
-				mprintf(("current position: %f %f %f\n", objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z));
-				mprintf(("new global vel: %f %f %f\n", objp->phys_info.vel.xyz.x, objp->phys_info.vel.xyz.y, objp->phys_info.vel.xyz.z));
 			} else {
 				// physics
 				obj_move_call_physics(objp, frametime);
