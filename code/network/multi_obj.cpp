@@ -102,6 +102,8 @@ struct oo_packet_and_interp_tracking {
 	vec3d anticipated_velocity2;		// The velocity we get from interpolation 2
 	vec3d anticipated_velocity3;		// The velocity we get from interpolation 3
 
+	vec3d last_calculated_pos;			// The last position interpolation said the ship should be.  Recorded to stop rubberbanding.
+
 	bez_spline pos_spline;				// Points set for positional interpolation.
 
 	// bashing the last received desired velocity and desired rotational velocity allows us to keep 
@@ -2538,6 +2540,7 @@ void multi_init_oo_and_ship_tracker()
 	temp_interp.anticipated_velocity1 = vmd_zero_vector;
 	temp_interp.anticipated_velocity2 = vmd_zero_vector;
 	temp_interp.anticipated_velocity3 = vmd_zero_vector;
+	temp_interp.last_calculated_pos = vmd_zero_vector;
 
 	temp_interp.pos_spline = bez_spline();
 
@@ -3168,7 +3171,7 @@ void multi_oo_interp(object* objp)
 					old_velocity = interp_data->anticipated_velocity1;
 					new_velocity = interp_data->anticipated_velocity2;
 
-					time_factor -= 2;
+					time_factor -= 2.0f;
 				} // between interpolated angles b and c
 				else if (time_factor < 4.0f) {
 					old_angles = interp_data->anticipated_angles_b;
@@ -3176,7 +3179,7 @@ void multi_oo_interp(object* objp)
 					old_velocity = interp_data->anticipated_velocity2;
 					new_velocity = interp_data->anticipated_velocity3;
 
-					time_factor -= 3;
+					time_factor -= 3.0f;
 				}
 
 				vm_interpolate_angles_quick(&temp_angles, &old_angles, &new_angles, time_factor);
