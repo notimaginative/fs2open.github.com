@@ -1511,7 +1511,6 @@ void obj_move_all(float frametime)
 		if (!(objp->flags[Object::Object_Flags::Immobile] && objp->hull_strength > 0.0f)) {
 			// if this is an object which should be interpolated in multiplayer, do so
 			if (multi_oo_is_interp_object(objp)) {
-				mprintf(("old position: %f %f %f ", objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z));
 				multi_oo_interp(objp);
 			} else {
 				// physics

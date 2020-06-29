@@ -455,16 +455,13 @@ int multi_find_prev_frame_idx()
 	}
 }
 
-// Calculates the current wrap from a packet sequence number or from an otherwise combined frame.
-ushort multi_ship_record_calculate_wrap(ushort combined_frame) 
-{	
-	return combined_frame  / MAX_FRAMES_RECORDED;
-}
-
 // Finds the first frame that is before the incoming timestamp.
-int multi_ship_record_find_frame(ushort client_frame, ushort wrap, int time_elapsed)
+int multi_ship_record_find_frame(ushort client_frame, int time_elapsed)
 {	
-	// unpack the wrap and frame from the client packet
+	// figure out the correct wrap
+	int wrap = client_frame  / MAX_FRAMES_RECORDED;
+
+	// figure out the frame index within the wrap
 	int frame = client_frame % MAX_FRAMES_RECORDED;
 	// get how many frames we would go into the future.
 	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
@@ -1237,7 +1234,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		// in order to send data by axis we must rotate the global velocity into local coordinates
 		vec3d local_desired_vel;
 
-		vm_vec_unrotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
+		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient); // TODO: UNROTATE?
 		
 		ret = multi_pack_unpack_desired_vel_and_desired_rotvel(1, data + packet_size + header_bytes, &objp->phys_info, &local_desired_vel);
 
@@ -1582,19 +1579,19 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 	// add the object's net signature, type and oo_flags
 	if (!(Net_player->flags & NETINFO_FLAG_AM_MASTER)) {
 		GET_USHORT(net_sig);
-		mprintf(("start new packet net_sig %d ", net_sig));
+	//	mprintf(("start new packet net_sig %d ", net_sig));
 	}
 
 	// clients always pos and orient stuff only
 	GET_USHORT(oo_flags);
 	GET_DATA(data_size);
 	GET_USHORT(seq_num);
-	mprintf(("oo_flags %d data_size %d seq_num %d\ncontents ", oo_flags, data_size, seq_num));
+	/*	mprintf(("oo_flags %d data_size %d seq_num %d\ncontents ", oo_flags, data_size, seq_num));
 	int bob = (MULTIPLAYER_CLIENT) ? 7 : 5;
 	for (int i = bob; i < bob + data_size ; i++) {
 		mprintf(("%d ",data[i + bob] ));
 	}
-	mprintf(("\n"));
+	mprintf(("\n")); */
 	if (MULTIPLAYER_MASTER) {
 		// client cannot send these types because the server is in charge of all of these things.
 		// TODO: Consider changing this to the booting the player that the request came from.
@@ -1750,7 +1747,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		offset += r1;
 		pos_and_time_data_size += r1;
 
-		mprintf(("position received from pacet: %f %f %f\n", new_pos.xyz.x, new_pos.xyz.y, new_pos.xyz.z));
+//		mprintf(("position received from pacet: %f %f %f\n", new_pos.xyz.x, new_pos.xyz.y, new_pos.xyz.z));
 
 		// unpack orientation
 		int r2 = multi_pack_unpack_orient( 0, data + offset, &new_angles );
@@ -1770,7 +1767,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		ubyte r6 = multi_pack_unpack_desired_vel_and_desired_rotvel(0, data + offset, &pobjp->phys_info, &local_desired_vel);
 		offset += r6;
 		// change it back to global coordinates.
-		vm_vec_rotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
+		vm_vec_unrotate(&new_phys_info.desired_vel, &local_desired_vel, &new_orient);
 		pos_and_time_data_size += r6;
 
 		// make sure this is the newest frame sent and then start storing everything.
@@ -3042,6 +3039,8 @@ void multi_oo_interp(object* objp)
 			ship_fire_primary(objp, 1, 0);
 		}
 	}
+
+	vec3d store_old_pos = objp->pos, store_old_vel = objp->phys_info.vel;
 	int net_sig_idx = objp->net_signature;
 
 	oo_packet_and_interp_tracking* interp_data = &Oo_info.interp[net_sig_idx];
@@ -3054,14 +3053,22 @@ void multi_oo_interp(object* objp)
 	static int the_one = 0;
 	if (the_one == 0) {
 		the_one = objp->net_signature;
+			mprintf(("branches,delta,time_factor,old_pos_x,old_pos_y,old_pos_z,new_pos_x,new_pos_y,new_pos_z,old_vel_x,old_vel_y,old_vel_z,new_vel_x,new_vel_y,new_vel_z,speed,for_speed\n"));
 	}
 	// if this ship doesn't have enough data points yet or somehow else invalid, pretend it's a normal ship and skip it.
 	if (interp_data->prev_pack_pos_frame == -1) {
+		if (objp->net_signature == the_one) {
+			mprintf(("t"));
+		}
 			physics_sim_vel(&objp->pos, &objp->phys_info, flFrametime, &objp->orient);
 			physics_sim_rot(&objp->orient, &objp->phys_info, flFrametime);
 
 	} // once there are enough data points, we begin interpolating.
 	else {
+		if (objp->net_signature == the_one) {
+			mprintf(("f"));
+		}
+
 		// figure out how much time has passed
 		int temp_numerator = timestamp() - interp_data->pos_timestamp;
 
@@ -3069,9 +3076,16 @@ void multi_oo_interp(object* objp)
 		if (MULTIPLAYER_MASTER) {
 			int player_id = multi_find_player_by_net_signature(net_sig_idx);
 			temp_numerator += Net_players[player_id].s_info.ping.ping_avg / 3;
+			if (objp->net_signature == the_one) {
+				mprintf(("t"));
+			}
+
 		}
 		else {
 			temp_numerator += Net_players[0].s_info.ping.ping_avg / 3;
+			if (objp->net_signature == the_one) {
+				mprintf(("f"));
+			}
 		}
 
 		// divide in order to 
@@ -3082,16 +3096,20 @@ void multi_oo_interp(object* objp)
 		// then we divide by the difference in time between the last two packets. This gives us a 
 		// percent that tells us, for example, "35% of the time has elapsed until when we expect the next packet."
 		float time_factor = (time_elapsed / packet_delta) + 1.0f;
-		if (objp->net_signature == the_one )
-		mprintf(("time_factor was %f ", time_factor));
 		// if there was no movement, bash bash bash
 		if (interp_data->prev_packet_positionless) {
 			objp->pos = interp_data->new_packet_position;
-			if (objp->net_signature == the_one )
-			mprintf(("position was bashed "));
 			objp->orient = interp_data->new_orientation;
+			if (objp->net_signature == the_one) {
+				mprintf(("t"));
+			}
+
 		} // Overshoting in this frame or some edge case bug. Just sim the ship from the known values.
 		else if (time_factor > 4.0f || time_factor < 0.0f) {
+			if (objp->net_signature == the_one) {
+				mprintf(("else"));
+			}
+
 			// Run the simulation the best we can.
 			// if transitioning to the normal, we need to jump to the end of the simulated points and then simulate forward some if there's extra time. 
 			float regular_sim_delta;
@@ -3101,7 +3119,15 @@ void multi_oo_interp(object* objp)
 				objp->pos = interp_data->new_packet_position;
 				objp->orient = interp_data->new_orientation;
 				regular_sim_delta = time_elapsed - (2 * packet_delta);
+				if (objp->net_signature == the_one) {
+					mprintf(("t"));
+				}
+
 			} else {
+				if (objp->net_signature == the_one) {
+					mprintf(("f"));
+				}
+
 				regular_sim_delta = flFrametime;
 			}
 			// Continue simulating if we have time that we need to simulate and exclude fake values.
@@ -3111,10 +3137,24 @@ void multi_oo_interp(object* objp)
 				objp->phys_info.desired_rotvel = interp_data->cur_pack_des_rot_vel;
 				physics_sim_vel(&objp->pos, &objp->phys_info, regular_sim_delta, &objp->orient);
 				physics_sim_rot(&objp->orient, &objp->phys_info, regular_sim_delta);
+				if (objp->net_signature == the_one) {
+					mprintf(("t"));
+				}
+
+			}
+			else {
+				if (objp->net_signature == the_one) {
+					mprintf(("f"));
+				}
+
 			}
 
 		} // valid time factors.
 		else {
+			if (objp->net_signature == the_one) {
+				mprintf(("f"));
+			}
+
 			interp_data->client_simulation_mode = false;
 
 			// Cyborg17 - we are no longer blending two interpolation curves.  I'm not sure *how*, but they were somehow making it look 
@@ -3122,8 +3162,6 @@ void multi_oo_interp(object* objp)
 			float u = (time_factor) / 4.0f;
 			vec3d interp_point;
 			interp_data->pos_spline.bez_get_point(&interp_point, u);
-			if (objp->net_signature == the_one )
-			mprintf((" interp_point is %f %f %f, position error is %f %f %f ", interp_point.xyz.x, interp_point.xyz.y, interp_point.xyz.z, interp_data->position_error.xyz.x, interp_data->position_error.xyz.y, interp_data->position_error.xyz.z));
 			// now to smooth out the error that the client caused during the last round of interpolation.
 			if ( (time_factor < 2.0f) && (time_factor > 0.0f) && (vm_vec_mag_squared(&interp_data->position_error) > 0.0f) ) {
 				vec3d remove_error_vector;
@@ -3131,8 +3169,15 @@ void multi_oo_interp(object* objp)
 				float temp_error_factor = 1 - (time_factor * 0.5f); 
 				vm_vec_copy_scale(&remove_error_vector, &interp_data->position_error, temp_error_factor);
 				vm_vec_add2(&interp_point, &remove_error_vector);
-				if (objp->net_signature == the_one )
-				mprintf((" removing this much error: %f %f %f ", remove_error_vector.xyz.x, remove_error_vector.xyz.y, remove_error_vector.xyz.z));
+				if (objp->net_signature == the_one) {
+					mprintf(("t"));
+				}
+
+			}
+			else {
+				if (objp->net_signature == the_one) {
+					mprintf(("f"));
+				}
 			}
 
 			// set the new position.
@@ -3141,23 +3186,43 @@ void multi_oo_interp(object* objp)
 			// Now rotational interpolation
 			// exactly on the middle point, save some time and just put the ship on that orientation.
 			if (time_factor == 2.0f) {
+				if (objp->net_signature == the_one) {
+					mprintf(("t,"));
+				}
+
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_a);
 				objp->phys_info.vel = interp_data->anticipated_velocity1;
 			} // Same for being exactly on the end point
 			else if (time_factor == 3.0f) {
+				if (objp->net_signature == the_one) {
+					mprintf(("else1,"));
+				}
+
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_b);
 				objp->phys_info.vel = interp_data->anticipated_velocity2;
 			}
 			else if (time_factor == 4.0f) {
+				if (objp->net_signature == the_one) {
+					mprintf(("else2,"));
+				}
+
 				vm_angles_2_matrix(&objp->orient, &interp_data->anticipated_angles_c);
 				objp->phys_info.vel = interp_data->anticipated_velocity3;
 
 			} // in case we have to do our interpolation. We cannot do anything if it's less than 1 because those are actually old values that *should* never happen.
 			else if (time_factor > 1.0f) {
+				if (objp->net_signature == the_one) {
+					mprintf(("else3"));
+				}
+
 				angles temp_angles, old_angles, new_angles;
 				vec3d old_velocity, new_velocity;
 				// Between packet and first interpolated angles
 				if (time_factor < 2.0f) {
+					if (objp->net_signature == the_one) {
+						mprintf(("t,"));
+					}
+
 					old_angles = interp_data->new_angles;
 					new_angles = interp_data->anticipated_angles_a;
 					old_velocity = interp_data->new_velocity;
@@ -3166,6 +3231,10 @@ void multi_oo_interp(object* objp)
 					time_factor--;
 				} // between interpolated angles a and b
 				else if (time_factor < 3.0f) {
+					if (objp->net_signature == the_one) {
+						mprintf(("else1,"));
+					}
+
 					old_angles = interp_data->anticipated_angles_a;
 					new_angles = interp_data->anticipated_angles_b;
 					old_velocity = interp_data->anticipated_velocity1;
@@ -3174,12 +3243,21 @@ void multi_oo_interp(object* objp)
 					time_factor -= 2.0f;
 				} // between interpolated angles b and c
 				else if (time_factor < 4.0f) {
+					if (objp->net_signature == the_one) {
+						mprintf(("else2,"));
+					}
+
 					old_angles = interp_data->anticipated_angles_b;
 					new_angles = interp_data->anticipated_angles_c;
 					old_velocity = interp_data->anticipated_velocity2;
 					new_velocity = interp_data->anticipated_velocity3;
 
 					time_factor -= 3.0f;
+				}
+				else {
+					if (objp->net_signature == the_one) {
+						mprintf(("f,"));
+					}
 				}
 
 				vm_interpolate_angles_quick(&temp_angles, &old_angles, &new_angles, time_factor);
@@ -3188,15 +3266,21 @@ void multi_oo_interp(object* objp)
 				vm_vec_scale(&old_velocity, 1 - time_factor);
 				vm_vec_add(&objp->phys_info.vel, &new_velocity, &old_velocity);
 			}
+			else {
+				if (objp->net_signature == the_one) {
+					mprintf(("final is false,"));
+				}
+
+			}
 		}
 	}
 
 	// duplicate the rest of the physics engine's calls here to make the simulation more exact.
 	objp->phys_info.speed = vm_vec_mag(&objp->phys_info.vel);
 	objp->phys_info.fspeed = vm_vec_dot(&objp->orient.vec.fvec, &objp->phys_info.vel);
-	if (objp->net_signature == the_one )
-	mprintf((" Fso calculated a position of %f %f %f speed of %f, and forward speed %f\n", objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z, objp->phys_info.speed, objp->phys_info.fspeed));
-
+	if (objp->net_signature == the_one) {
+		mprintf(("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", packet_delta, store_old_pos.xyz.x,store_old_pos.xyz.y, store_old_pos.xyz.z, objp->pos.xyz.x, objp->pos.xyz.y, objp->pos.xyz.z,store_old_vel.xyz.x,store_old_vel.xyz.y, store_old_vel.xyz.z, objp->phys_info.speed, objp->phys_info.fspeed));
+	}
 }
 
 void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info *new_phys_info)
@@ -3207,6 +3291,13 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 		return;
 	}
 
+	static bool fred = true;
+
+/*	if (fred) {
+		mprintf(("ad?,delta,g_v_x,g_v_y,g_v_z,l_v_x,l_v_y,l_v_z,l_err_x,l_err_y,l_err_z,l_n_px,l_n_py,l_n_pz,n_g_err_x,n_g_err_y,n_g_err_z,n_pos_x,n_pos_y,n_pos_z\n"));
+		fred = false;
+	}*/
+
 	ushort net_sig_idx = objp->net_signature;
 	
 	// find the float time version of how much time has passed
@@ -3214,9 +3305,12 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	// if an error or invalid value, use the local timestamps instead of those received. Should be rare.
 	if (delta <= 0.0f) {
 		delta = float(timestamp() - Oo_info.received_frametimes[Oo_info.interp[net_sig_idx].pos_timestamp]) / 1000.0f;
-		mprintf(("alternate method delta..."));
+//		mprintf(("%d,", 1));
 	}
-	mprintf(("delta,global velocity,local velocity,local_error,local_new_position,new_position_error,new packet position....%f,", delta));
+	else {
+//		mprintf(("%d,", 0));
+	}
+//	mprintf(("%f,", delta));
 
 	Oo_info.interp[net_sig_idx].pos_time_delta = delta;
 
@@ -3226,7 +3320,7 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	distance = vm_vec_normalized_dir(&global_velocity, &Oo_info.interp[net_sig_idx].new_packet_position, &Oo_info.interp[net_sig_idx].old_packet_position);
 	
 	// Get rid of any rubberbanding here
-	if (distance >= 0.0f) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
+	if (true) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
 
 		vec3d local_error, local_vel, local_new_position;
 
@@ -3265,6 +3359,7 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 		}
 		// store "new_point"
 		vm_vec_rotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
+	//	mprintf(("%f,%f,%f,%f,%f,%f\n", Oo_info.interp[net_sig_idx].position_error.xyz.x,Oo_info.interp[net_sig_idx].position_error.xyz.y,Oo_info.interp[net_sig_idx].position_error.xyz.z, Oo_info.interp[net_sig_idx].new_packet_position.xyz.x,Oo_info.interp[net_sig_idx].new_packet_position.xyz.y,Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
 	}
 
 	// get the spline representing where this new point tells us we'd be heading
@@ -3335,7 +3430,7 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx)
 	}
 	
 	if (old_frame == new_frame) {
-		mprintf(("multi_oo_calc_pos_time_difference somehow showed the same frame for old and new frame.\n"));
+//		mprintf(("multi_oo_calc_pos_time_difference somehow showed the same frame for old and new frame.\n"));
 	}
 	
 	if (old_frame == new_frame) {

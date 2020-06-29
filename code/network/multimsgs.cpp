@@ -7757,9 +7757,8 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 		return;
 	}
 
-	// figure out correct start frame and wrap
-	ushort wrap = multi_ship_record_calculate_wrap(client_frame);
-	frame = multi_ship_record_find_frame(client_frame, wrap, time_elapsed);
+	// figure out correct start frame
+	frame = multi_ship_record_find_frame(client_frame, time_elapsed);
 
 	if (frame > -1) {
 		// make sure that record we would access is from this ship!
