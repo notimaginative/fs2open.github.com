@@ -3322,14 +3322,12 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	// Get rid of any rubberbanding here
 	if (true) { // no "rubberbanding" if there's no velocity, just a possible correction to the position done elsewhere.
 
-		vec3d local_error, local_vel, local_new_position;
+		vec3d local_error, local_vel;
 
 		// change velocity to local coordinates.
-		vm_vec_unrotate(&local_vel, &global_velocity, new_orient);
+		vm_vec_rotate(&local_vel, &global_velocity, new_orient);
 		// change error to local coordiantes.
-		vm_vec_unrotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
-		// change last received position to local coordinates.
-		vm_vec_unrotate(&local_new_position, &Oo_info.interp[net_sig_idx].new_packet_position, new_orient);
+		vm_vec_rotate(&local_error, &Oo_info.interp[net_sig_idx].position_error, new_orient);
 //		mprintf(("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,",global_velocity.xyz.x,global_velocity.xyz.y,global_velocity.xyz.z, local_vel.xyz.x, local_vel.xyz.y, local_vel.xyz.z, local_error.xyz.x, local_error.xyz.y, local_error.xyz.z, local_new_position.xyz.x, local_new_position.xyz.y, local_new_position.xyz.z));
 		// get rid of rubberbanding for each direction.  If there's any disagreement in the signs, just get rid of it and go with the current ship location.
 
@@ -3351,14 +3349,11 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 		// store the results for later.
 		// some error remains
 		if (vm_vec_mag_squared(&local_error) > 0.0f) {
-			vm_vec_rotate(&Oo_info.interp[net_sig_idx].position_error, &local_error, new_orient);
+			vm_vec_unrotate(&Oo_info.interp[net_sig_idx].position_error, &local_error, new_orient);
 		}  // all error was removed, so just set it to zero to keep from breaking vector math
 		else {
 			Oo_info.interp[net_sig_idx].position_error = vmd_zero_vector;
-
 		}
-		// store "new_point"
-		vm_vec_rotate(&Oo_info.interp[net_sig_idx].new_packet_position, &local_new_position, new_orient);
 	//	mprintf(("%f,%f,%f,%f,%f,%f\n", Oo_info.interp[net_sig_idx].position_error.xyz.x,Oo_info.interp[net_sig_idx].position_error.xyz.y,Oo_info.interp[net_sig_idx].position_error.xyz.z, Oo_info.interp[net_sig_idx].new_packet_position.xyz.x,Oo_info.interp[net_sig_idx].new_packet_position.xyz.y,Oo_info.interp[net_sig_idx].new_packet_position.xyz.z));
 	}
 
