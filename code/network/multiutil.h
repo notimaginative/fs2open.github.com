@@ -194,7 +194,7 @@ int multi_pack_unpack_orient(int write, ubyte *data, angles *angles_out);
 
 // Packs/unpacks velocity
 // Returns number of bytes read or written.
-int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi);
+int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, physics_info *pi);
 
 // Packs/unpacks rotational velocity
 // Returns number of bytes read or written.
