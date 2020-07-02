@@ -41,10 +41,6 @@ extern const std::uint32_t MAX_TIME;
 
 // One frame record per ship.
 struct oo_ship_position_records {
-
-	int initial_frame;												// to keep track of when each ship was added to the struct, as compared to total frames.           
-	int death_or_depart_frame;										// to keep track of when a ship's info should no longer be trusted for interpolation
-
 	vec3d positions[MAX_FRAMES_RECORDED];							// The recorded ship positions 
 	matrix orientations[MAX_FRAMES_RECORDED];						// The recorded ship orientations 
 	vec3d velocities[MAX_FRAMES_RECORDED];							// The recorded ship velocities (required for additive velocity shots and auto aim)
@@ -94,15 +90,12 @@ struct oo_packet_and_interp_tracking {
 	angles anticipated_angles_a;		// What angles we expect the ship to eventually go to based on physics info.
 	angles anticipated_angles_b;		// The anticipated angles further along in the simulation than anticipated_angles_a
 	angles anticipated_angles_c;		// Further along than angles_b
-	angles orientation_error;			// Orientation error that is gradually removed. NOTE: not yet implemented, may not need to be.
 	matrix new_orientation;				// The new angles transferred to the new orientation.
 
 	vec3d new_velocity;					// The velocity we calculate from the packet
 	vec3d anticipated_velocity1;		// The velocity we get from interpolation 1
 	vec3d anticipated_velocity2;		// The velocity we get from interpolation 2
 	vec3d anticipated_velocity3;		// The velocity we get from interpolation 3
-
-	vec3d last_calculated_pos;			// The last position interpolation said the ship should be.  Recorded to stop rubberbanding.
 
 	bez_spline pos_spline;				// Points set for positional interpolation.
 
@@ -375,7 +368,6 @@ void multi_ship_record_add_ship(int obj_num)
 	if (Game_mode & GM_IN_MISSION) {
 
 		// only add positional info if they are in the mission.
-		Oo_info.frame_info[net_sig_idx].initial_frame = Oo_info.number_of_frames;
 		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
 		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
 		// TODO: See if there should be any special case for ships destroyed before the beginning of the mission.
@@ -418,11 +410,6 @@ void multi_ship_record_update_all()
 		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
 		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
 		Oo_info.frame_info[net_sig_idx].velocities[Oo_info.cur_frame_index] = objp->phys_info.vel;
-
-		// if they are dying, mark them as dead.
-		if (Oo_info.frame_info[net_sig_idx].death_or_depart_frame < 0 && cur_ship.is_dying_or_departing()) {
-			Oo_info.frame_info[net_sig_idx].death_or_depart_frame = Oo_info.number_of_frames;
-		}
 	}
 }
 
@@ -851,9 +838,6 @@ void multi_oo_respawn_reset_info(ushort net_sig)
 	}
 
 	// When a player respawns, they keep their net signature, so clean up all the info that could mess things up in the future.
-
-	Oo_info.frame_info[net_sig].death_or_depart_frame = -1;
-
 	for (auto & player_record : Oo_info.player_frame_info) {
 		player_record.last_sent[net_sig].timestamp = -1;
 		player_record.last_sent[net_sig].position = vmd_zero_vector;
@@ -893,7 +877,6 @@ void multi_oo_respawn_reset_info(ushort net_sig)
 	interp->anticipated_angles_a = vmd_zero_angles;
 	interp->anticipated_angles_b = vmd_zero_angles;
 	interp->anticipated_angles_c = vmd_zero_angles;
-	interp->orientation_error = vmd_zero_angles;
 	interp->new_orientation = vmd_identity_matrix;
 
 	interp->client_simulation_mode = true;
@@ -1211,7 +1194,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		ret = (ubyte)multi_pack_unpack_position( 1, data + packet_size + header_bytes, &objp->pos );
 		packet_size += ret;
 
-		// global records
+		// datarate tracking.
 		multi_rate_add(NET_PLAYER_NUM(pl), "pos", ret);
 
 		// orientation (now done via angles)
@@ -1221,12 +1204,14 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		ret = (ubyte)multi_pack_unpack_orient( 1, data + packet_size + header_bytes, &temp_angles);
 
 		packet_size += ret;
+		// datarate tracking.
 		multi_rate_add(NET_PLAYER_NUM(pl), "ori", ret);	
 
 		// velocity -- Tried to do this by calculation instead but kept running into issues. 
 		ret = multi_pack_unpack_vel(1, data + packet_size + header_bytes, &objp->orient, &objp->phys_info);
 
 		packet_size += ret;
+		// datarate tracking.
 		multi_rate_add(NET_PLAYER_NUM(pl), "pos", ret);	
 
 		// Rotational Velocity,
@@ -1234,7 +1219,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 
 		packet_size += ret;	
 
-		// global records		
+		// datarate tracking.		
 		multi_rate_add(NET_PLAYER_NUM(pl), "ori", ret);		
 		ret = 0;
 
@@ -1299,7 +1284,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		
 		// Only send info if the count is greater than zero and if we're *not* on the very first frame when everything is going to be 100%, anyway.
 		if (count > 0 && Oo_info.number_of_frames != 0){
-			Assertion(count <= MAX_MODEL_SUBSYSTEMS, "Object Update packet exceeded limit for number of subsystems. This is a fatal error in the code, please report!");
+			Assertion(count <= MAX_MODEL_SUBSYSTEMS, "Object Update packet exceeded limit for number of subsystems. This is a coder error, please report!\n");
 			oo_flags |= OO_SUBSYSTEMS_NEW;
 
 			// pack the count of subsystems first.
@@ -1308,7 +1293,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 			for (int j = 0; j < count; j++) {
 				PACK_BYTE(flagged_subsystem_list[j]);
 				PACK_PERCENT(subsystem_list_health[j]);
-				Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[j] = subsystem_list_health[j];
+				Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[flagged_subsystem_list[j]] = subsystem_list_health[j];
 			}
 		}
 	}
@@ -1804,9 +1789,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			interp_data->cur_pack_des_vel = new_phys_info.desired_vel;
 			interp_data->cur_pack_local_des_vel = local_desired_vel;
 			interp_data->cur_pack_des_rot_vel = new_phys_info.desired_rotvel;
-
-			vm_vec_avg(&new_phys_info.desired_vel, &new_phys_info.desired_vel, &interp_data->cur_pack_des_vel);
-			vm_vec_avg(&new_phys_info.desired_rotvel, &new_phys_info.desired_rotvel, &interp_data->cur_pack_des_rot_vel);
 
 			pobjp->phys_info = new_phys_info;			
 		}
@@ -2483,8 +2465,6 @@ void multi_init_oo_and_ship_tracker()
 	oo_ship_position_records temp_position_records;
 	oo_netplayer_records temp_netplayer_records;
 
-	temp_position_records.death_or_depart_frame = -1;
-	temp_position_records.initial_frame = -1;
 	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
 		temp_position_records.orientations[i] = vmd_identity_matrix;
 		temp_position_records.positions[i] = vmd_zero_vector;
@@ -2531,14 +2511,12 @@ void multi_init_oo_and_ship_tracker()
 	temp_interp.anticipated_angles_a = vmd_zero_angles;
 	temp_interp.anticipated_angles_b = vmd_zero_angles;
 	temp_interp.anticipated_angles_c = vmd_zero_angles;
-	temp_interp.orientation_error = vmd_zero_angles;
 	temp_interp.new_orientation = vmd_identity_matrix;
 
 	temp_interp.new_velocity = vmd_zero_vector;
 	temp_interp.anticipated_velocity1 = vmd_zero_vector;
 	temp_interp.anticipated_velocity2 = vmd_zero_vector;
 	temp_interp.anticipated_velocity3 = vmd_zero_vector;
-	temp_interp.last_calculated_pos = vmd_zero_vector;
 
 	temp_interp.pos_spline = bez_spline();
 
@@ -3256,7 +3234,7 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Adjust desired velocity, because it's in world coordinates, and it doesn't make sense to reuse the same one four more times.
-	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_a = ang_estimated;
 
@@ -3270,7 +3248,7 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_b = ang_estimated;
 	Oo_info.interp[net_sig_idx].anticipated_velocity2 = p_copy.vel;
@@ -3280,7 +3258,7 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_rotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
 
 	Oo_info.interp[net_sig_idx].anticipated_angles_c = ang_estimated;
 	Oo_info.interp[net_sig_idx].anticipated_velocity3 = p_copy.vel;
