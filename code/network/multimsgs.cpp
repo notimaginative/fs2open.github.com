@@ -7740,8 +7740,6 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 
 	PACKET_SET_SIZE();
 
-	//		mprintf(("\nServer Net_signature %d ref_obj_netsig %d last_received_frame %d time_elapsed %d \n", shooter_sig, target_ref, client_frame, time_elapsed));
-
 	objp_ref = multi_get_network_object(target_ref);
 
 	if (objp_ref == nullptr) {
@@ -7761,12 +7759,6 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 	frame = multi_ship_record_find_frame(client_frame, time_elapsed);
 
 	if (frame > -1) {
-		// make sure that record we would access is from this ship!
-	//	if (multi_ship_record_verify_frame(objp_ref, client_frame) == false) {
-	//		mprintf(("New New primary packet frame was found to not belong to the given ship.\n"));
-	//		return;
-	//	}	
-
 		// adjust time so that we can interpolate the position and orientation that was seen on the client.
 		time_after_frame = multi_ship_record_find_time_after_frame(client_frame, frame, time_elapsed);
 		Assertion(time_after_frame >= 0, "Primary fire packet processor found an invalid time_after_frame of %d", time_after_frame);
