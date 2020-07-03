@@ -53,23 +53,14 @@ void multi_ship_record_update_all();
 // increment the tracker per frame, before incoming object packets are processed
 void multi_ship_record_increment_frame();
 
-// returns the last frame's index.
-int multi_find_prev_frame_idx();
-
 // find the right frame to start our weapon simulation
 int multi_ship_record_find_frame(ushort client_frame, int time_elapsed);
-
-// verify that a given frame exists for a given ship, requires the sequence number that the client sends.
-bool multi_ship_record_verify_frame(object* objp, int seq_num);
 
 // a quick lookups for position and orientation
 vec3d multi_ship_record_lookup_position(object* objp, int frame);
 
 // a quick lookups for orientation
 matrix multi_ship_record_lookup_orientation(object* objp, int frame);
-
-// quickly lookup how much time has passed since the given frame.
-uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 
 int multi_ship_record_find_time_after_frame(int client_frame, int frame, int time_elapsed);
 
@@ -85,26 +76,9 @@ void multi_ship_record_add_rollback_wep(int wep_objnum);
 // Manage rollback for a frame
 void multi_ship_record_do_rollback();
 
-// fire the rollback weapons that are in the rollback struct
-void multi_oo_fire_rollback_shots(int frame_idx);
-
-// moves all rollbacked ships back to the original frame
-void multi_oo_restore_frame(int frame_idx);
-
-// pushes the rollback weapons forward for a single rollback frame.
-void multi_oo_simulate_rollback_shots(int frame_idx);
-
-// restores ships to the positions they were in bedfore rollback.
-void multi_record_restore_positions();
-
-
-
 // ---------------------------------------------------------------------------------------------------
 // Client side frame tracking, for now used only to help lookup info from packets to improve client accuracy.
 // 
-
-// See if a newly arrived packet is a good new option as a reference object
-void multi_ship_record_rank_seq_num(object* objp, ushort seq_num);
 
 // Quick lookup for the most recently received frame
 ushort multi_client_lookup_ref_obj_net_sig();
@@ -114,9 +88,6 @@ ushort multi_client_lookup_frame_idx();
 
 // Quick lookup for the most recently received timestamp.
 int multi_client_lookup_frame_timestamp();
-
-// Quick lookup for the most recent received frametime from the server.
-int multi_client_lookup_current_frametime();
 
 // reset all the necessary info for respawning player.
 void multi_oo_respawn_reset_info(ushort net_sig);
@@ -138,8 +109,6 @@ void multi_init_oo_and_ship_tracker();
 void multi_oo_send_control_info();
 void multi_oo_send_changed_object(object *changedobj);
 
-// helper function that updates all interpolation info for a specific ship from a packet
-void multi_oo_maybe_update_interp_info(object* objp, vec3d* new_pos, angles* new_ori_angles, matrix* new_ori_mat, physics_info* new_phys_info, bool adjust_pos, bool newest_pos);
 
 // reset all sequencing info
 void multi_oo_reset_sequencing();
@@ -149,9 +118,6 @@ int multi_oo_is_interp_object(object *objp);
 
 // interp position and orientation
 void multi_oo_interp(object *objp);
-
-// recalculate how much time is between position packets
-float multi_oo_calc_pos_time_difference(int net_sig_idx);
 
 // Cyborg17 - sort through subsystems to make sure we only update the ones we need to update.
 //int multi_pack_required_subsytems(ship* shipp, ubyte* data, int packet_size, int header_bytes);
