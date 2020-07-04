@@ -159,15 +159,15 @@ struct oo_general_info {
 	SCP_vector<oo_netplayer_records> player_frame_info;		// keeps track of player targets and what has been sent to each player. Uses player as the index
 
 
-	SCP_vector<oo_packet_and_interp_tracking> interp;		// Tracking received info and interpolation timing per ship uses net_signature as its index.
+	SCP_vector<oo_packet_and_interp_tracking> interp;		// Tracking received info and interpolation timing per ship, uses net_signature as its index.
 
 	// rollback info
 	bool rollback_mode;										// are we currently creating and moving weapons from the client primary fire packets
 	SCP_vector<object*> rollback_wobjp_created_this_frame;	// the weapons created this rollback frame.
-	SCP_vector<object*> rollback_wobjp;					
-	// a list of the weapons that were created, so that we can roll them into the current simulation
+	SCP_vector<object*> rollback_wobjp;						// a list of the weapons that were created, so that we can roll them into the current simulation
+
 	SCP_vector<object*> rollback_ships;						// a list of ships that take part in roll back, no quick index, must be iterated through.
-	SCP_vector<oo_rollback_restore_record> restore_points;	// Where to move ships back to when done. no quick index, must be iterated through.
+	SCP_vector<oo_rollback_restore_record> restore_points;	// where to move ships back to when done with rollback. no quick index, must be iterated through.
 	SCP_vector<oo_unsimulated_shots> 
 		rollback_shots_to_be_fired[MAX_FRAMES_RECORDED];				// the shots we will need to fire and simulate during rollback, organized into the frames they will be fired
 	SCP_vector<int>rollback_collide_list;					// the list of ships and weapons that we need to pass to collision detection during rollback.
@@ -258,13 +258,13 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx);
 #define HAS_WRAPPED_MINIMUM			(SERVER_TRACKER_LARGE_WRAP_TOTAL - (MAX_FRAMES_RECORDED * 2)) 
 
 // timestamp values for object update times based on client's update level.
-// Cyborg17 - This is the one update number we should adjust, because it's the player's target.
+// Cyborg17 - This is the one update number I have adjusted, because it's the player's target.
 int Multi_oo_target_update_times[MAX_OBJ_UPDATE_LEVELS] = 
 {
-	50, 				// 30x a second 
-	50, 				// 30x a second
-	20,				// 60x a second
-	20,				// 60x a second
+	50, 				// 20x a second 
+	50, 				// 20x a second
+	20,				// 50x a second
+	20,				// 50x a second
 };
 
 // for near ships
@@ -273,7 +273,7 @@ int Multi_oo_front_near_update_times[MAX_OBJ_UPDATE_LEVELS] =
 	150,				// low update
 	100,				// medium update
 	66,				// high update
-	66,
+	66,				// LAN update
 };
 
 // for medium ships
@@ -282,7 +282,7 @@ int Multi_oo_front_medium_update_times[MAX_OBJ_UPDATE_LEVELS] =
 	250,				// low update
 	180, 				// medium update
 	120,				// high update
-	66,
+	66,					// LAN update
 };
 
 // for far ships
@@ -291,7 +291,7 @@ int Multi_oo_front_far_update_times[MAX_OBJ_UPDATE_LEVELS] =
 	750,				// low update
 	350, 				// medium update
 	150, 				// high update
-	66,
+	66,					// LAN update
 };
 
 // for near ships
@@ -300,7 +300,7 @@ int Multi_oo_rear_near_update_times[MAX_OBJ_UPDATE_LEVELS] =
 	300,				// low update
 	200,				// medium update
 	100,				// high update
-	66,
+	66,					// LAN update
 };
 
 // for medium ships
@@ -309,16 +309,16 @@ int Multi_oo_rear_medium_update_times[MAX_OBJ_UPDATE_LEVELS] =
 	800,				// low update
 	600,				// medium update
 	300,				// high update
-	66,
+	66,					// LAN update
 };
 
 // for far ships
 int Multi_oo_rear_far_update_times[MAX_OBJ_UPDATE_LEVELS] = 
 {
-	2500, 			// low update
+	2500, 				// low update
 	1500,				// medium update
 	400,				// high update
-	66,
+	66,					// LAN update
 };
 
 // ship index list for possibly sorting ships based upon distance, etc
@@ -335,11 +335,13 @@ int OO_update_index = -1;							// The player index that allows us to look up mu
 // if it breaks, find Cyborg17
 
 // We record positions and orientations in Oo_info.frame_info so that we can create a weapon in the same relative 
-// circumstances as on the client.  I was directly in front, 600 meters away when I fired?  Well, now the client will tell the 
-// server that and the server will rewind part of its simulation to recreate that shot and then redo its simulation.
+// circumstances as on the client.  I was directly in front, 600 meters away when I fired?  Well, now the client 
+// will tell the server that and the server will rewind part of its simulation to recreate that shot and then 
+// redo its simulation. There will still be some very small differences between server and client caused by the 
+// fact that the flFrametimes will be different, but changing that would be impossible.
 // ---------------------------------------------------------------------------------------------------
 
-// Add a new ship to the tracking struct once it's valid in a mission.
+// Add a new ship to the tracking struct
 void multi_ship_record_add_ship(int obj_num)
 {
 	object* objp = &Objects[obj_num];
@@ -361,7 +363,7 @@ void multi_ship_record_add_ship(int obj_num)
 			Oo_info.player_frame_info[i].last_sent.push_back( Oo_info.player_frame_info[i].last_sent[0] );
 		}
 
-	} // if not, create the storage.
+	} // if not, create the storage for it.
 	else if (net_sig_idx > current_size) {
 		while (net_sig_idx >= current_size) {
 			Oo_info.frame_info.push_back(Oo_info.frame_info[0]);
@@ -377,8 +379,10 @@ void multi_ship_record_add_ship(int obj_num)
 
 	ship_info* sip = &Ship_info[Ships[objp->instance].ship_info_index];
 
-	// To use vectors for the subsystems, we have to init the subsystem tracking vectors here.
+	// To use vectors for the subsystems, we have to init the subsystem them here.
 	int subsystem_count = sip->n_subsystems;
+
+	Oo_info.interp[net_sig_idx].subsystems_comparison_frame.reserve(subsystem_count);
 
 	while (Oo_info.interp[net_sig_idx].subsystems_comparison_frame.size() < subsystem_count) {
 		Oo_info.interp[net_sig_idx].subsystems_comparison_frame.push_back(-1);
@@ -394,15 +398,13 @@ void multi_ship_record_add_ship(int obj_num)
 		// only add positional info if they are in the mission.
 		Oo_info.frame_info[net_sig_idx].positions[Oo_info.cur_frame_index] = objp->pos;
 		Oo_info.frame_info[net_sig_idx].orientations[Oo_info.cur_frame_index] = objp->orient;
-		// TODO: See if there should be any special case for ships destroyed before the beginning of the mission.
 	}
 }
 
 // Update the tracking struct whenever the object is updated in-game
-// Server Only
 void multi_ship_record_update_all() 
 {
-	Assertion(MULTIPLAYER_MASTER, "Non-server accessed a server only function. Please report!!");
+	Assertion(MULTIPLAYER_MASTER, "Non-server accessed a server only function multi_ship_record_update_all(). Please report!!");
 
 	if (!MULTIPLAYER_MASTER) {
 		return;
@@ -443,7 +445,7 @@ void multi_ship_record_increment_frame()
 	Oo_info.number_of_frames++;
 	Oo_info.cur_frame_index++;
 
-	// Because we are only tracking 240 frames (up to 2 secs on a 120 fps machine), we will have to wrap the index often
+	// Because we are only tracking 30 frames (up to a quarter second on a 120 frame machine), we will have to wrap the index often
 	if (Oo_info.cur_frame_index == MAX_FRAMES_RECORDED) {
 		Oo_info.cur_frame_index = 0;
 		Oo_info.wrap_count++;
@@ -474,8 +476,6 @@ int multi_ship_record_find_frame(ushort client_frame, int time_elapsed)
 
 	// figure out the frame index within the wrap
 	int frame = client_frame % MAX_FRAMES_RECORDED;
-	// get how many frames we would go into the future.
-	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
 
 	// if the wrap is not the same.
 	if (wrap != Oo_info.wrap_count) {
@@ -505,6 +505,9 @@ int multi_ship_record_find_frame(ushort client_frame, int time_elapsed)
 	}
 
 	// Otherwise, look for the frame that the client is saying to look for.  If we hit the frame the client sent, return.
+	// get how many frames we would go into the future.
+	int target_timestamp = Oo_info.timestamps[frame] + time_elapsed;
+
 	for (int i = Oo_info.cur_frame_index - 1; i > -1; i--) {
 
 		// Check to see if the client's timestamp matches the recorded frames.
@@ -565,7 +568,7 @@ uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame)
 	return Oo_info.timestamps[new_frame] - Oo_info.timestamps[original_frame];
 }
 
-// figures out how much time has passed 
+// figures out how much time has passed bwetween the two frames.
 int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame, int time_elapsed) 
 {
 	starting_frame = starting_frame % MAX_FRAMES_RECORDED;
@@ -611,8 +614,7 @@ void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orie
 
 // Manage rollback for a frame
 void multi_ship_record_do_rollback() 
-{
-	
+{	
 	// only rollback if there are shots to simulate.
 	if (!Oo_info.rollback_mode) {
 		return;
@@ -662,15 +664,13 @@ void multi_ship_record_do_rollback()
 		Oo_info.rollback_collide_list.push_back(OBJ_INDEX(objp));
 	}
 
-	// at some point I should make it a better loop, like this one.
-	//	for (auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
-
-
+	// now we need to figure out which frame will start the rollback simulation
 	int frame_idx = Oo_info.cur_frame_index + 1;
 	if (frame_idx >= MAX_FRAMES_RECORDED) {
 		frame_idx = 0;
 	}
 
+	// loop through them
 	while (frame_idx != Oo_info.cur_frame_index) {
 		if (Oo_info.rollback_shots_to_be_fired[frame_idx].size() > 0) {
 			break;
@@ -681,10 +681,14 @@ void multi_ship_record_do_rollback()
 		}
 	}
 
+	// make sure we found one.
 	Assertion(frame_idx != Oo_info.cur_frame_index, "Rollback was called without there being a rollback shot to simulate. This is a coder error. Please report!");
 
+	if (frame_idx == Oo_info.cur_frame_index) {
+		return;
+	}
+
 	do {
-		
 		// move all ships to their recorded positions
 		multi_oo_restore_frame(frame_idx);
 
@@ -708,7 +712,7 @@ void multi_ship_record_do_rollback()
 	// restore the old frame
 	multi_record_restore_positions();
 
-	// clean up the old info
+	// clean up the rollback info that has been taken care of.
 	Oo_info.rollback_collide_list.clear();
 	Oo_info.rollback_mode = false;
 	Oo_info.rollback_ships.clear();
@@ -744,10 +748,9 @@ void multi_oo_fire_rollback_shots(int frame_idx)
 // moves all rollbacked ships back to the original frame
 void multi_oo_restore_frame(int frame_idx)
 {
-
+	// set the position, orientation, and velocity for each object
 	for (auto& objp : Oo_info.rollback_ships) {
 		Assertion(objp != nullptr, "Nullptr somehow got into the rollback ship vector, please report!");
-
 		objp->pos = Oo_info.frame_info[objp->net_signature].positions[frame_idx];
 		objp->orient = Oo_info.frame_info[objp->net_signature].orientations[frame_idx];
 		objp->phys_info.vel = Oo_info.frame_info[objp->net_signature].velocities[frame_idx];
@@ -757,14 +760,15 @@ void multi_oo_restore_frame(int frame_idx)
 // pushes the rollback weapons forward for a single rollback frame.
 void multi_oo_simulate_rollback_shots(int frame_idx) 
 {
-
 	int prev_frame = frame_idx - 1;
 	if (prev_frame < 0) {
 		prev_frame = MAX_FRAMES_RECORDED - 1;
 	}
 
+	// calculate the float version of the frametime.
 	float frametime = (float)multi_ship_record_get_time_elapsed(prev_frame, frame_idx) / (float)TIMESTAMP_FREQUENCY;
 
+	// push the weapons forward.
 	for (auto& objp : Oo_info.rollback_wobjp) {
 		Assertion(objp != nullptr, "Nullptr somehow got into the rollback weapon vector, please report!");
 		vm_vec_scale_add2(&objp->pos, &objp->phys_info.vel, frametime);
@@ -778,7 +782,7 @@ void multi_record_restore_positions()
 	for (auto restore_point : Oo_info.restore_points) {
 
 		object* objp = restore_point.roll_objp;
-
+		// reset the position, orientation, and velocity for each object
 		objp->pos = restore_point.position;
 		objp->orient = restore_point.orientation;
 		objp->phys_info.vel = restore_point.velocity;
@@ -802,14 +806,14 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 		Oo_info.most_recent_frame = seq_num;
 		Oo_info.ref_timestamp = timestamp();
 
-	} // if this packet is from the same frame,the closer ship makes for a slightly more accurate reference point
+	} // if this packet is from the same frame, the closer ship makes for a slightly more accurate reference point
 	else if (seq_num == Oo_info.most_recent_frame) {
 		object* temp_reference_object = multi_get_network_object(Oo_info.most_recent_updated_net_signature);
-		if (( vm_vec_dist_squared(&temp_reference_object->pos, &Objects[Player->objnum].pos)> vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos)) {
+		// check the distance
+		if ( vm_vec_dist_squared(&temp_reference_object->pos, &Objects[Player->objnum].pos) > vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos) ) {
 			Oo_info.most_recent_updated_net_signature = objp->net_signature;
 			Oo_info.most_recent_frame = seq_num;
 			Oo_info.ref_timestamp = timestamp();
-			Oo_info.distance_to_most_recent = temp_distance;
 		}
 	}	// the wrap case (which should be rare), this could potentially break if the mission designer leaves
 		// just 1 player completely by themselves on a long mission at *just* the right time.
@@ -820,28 +824,28 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 	}
 }
 
-// Client side! Quick lookup for the most recently received ship
+// Quick lookup for the most recently received ship
 ushort multi_client_lookup_ref_obj_net_sig()
 {	
 	return Oo_info.most_recent_updated_net_signature;
 }
 
-// Client side! Quick lookup for the most recently received frame
+// Quick lookup for the most recently received frame
 ushort multi_client_lookup_frame_idx()
 {
 	return Oo_info.most_recent_frame;
 }
 
-// Client side! Quick lookup for the most recently received timestamp.
+// Quick lookup for the most recently received timestamp.
 int multi_client_lookup_frame_timestamp()
 {
 	return Oo_info.ref_timestamp;
 }
 
 // Resets what info we have sent and interpolation info for a respawn
+// To be safe, I believe that most info should be reset.
 void multi_oo_respawn_reset_info(ushort net_sig) 
 {
-
 	Assertion(net_sig != 0, "Multi_reset_oo_info got passed an invalid value. This is a coder error, please report.");
 	if (net_sig == 0) {
 		return;
@@ -858,10 +862,6 @@ void multi_oo_respawn_reset_info(ushort net_sig)
 		player_record.last_sent[net_sig].perfect_shields_sent = false;
 		for (auto subsys : player_record.last_sent[net_sig].subsystems)
 			subsys = -1;
-	}
-
-	if (Oo_info.most_recent_updated_net_signature == net_sig) {
-		// TODO: write clean way to keep this ship from being the current reference ship.
 	}
 
 	oo_packet_and_interp_tracking* interp = &Oo_info.interp[net_sig];
@@ -1351,9 +1351,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		oo_flags |= OO_AFTERBURNER_NEW;
 	}
 
-	// make sure we have a valid chunk of data
-	// Clients: must be able to accomodate the data_size and seq_num before the data itself
-	// Server: TODO
+	// make sure we have a chunk of data that will fit.
 	Assert(packet_size < 500);
 	if(packet_size >= 500){
 		return 0;
