@@ -39,16 +39,16 @@
 
 extern const std::uint32_t MAX_TIME;
 
-// One frame record per ship.
+// One frame record per ship with each contained array holding one element for each frame.
 struct oo_ship_position_records {
-	vec3d positions[MAX_FRAMES_RECORDED];							// The recorded ship positions 
-	matrix orientations[MAX_FRAMES_RECORDED];						// The recorded ship orientations 
-	vec3d velocities[MAX_FRAMES_RECORDED];							// The recorded ship velocities (required for additive velocity shots and auto aim)
+	vec3d positions[MAX_FRAMES_RECORDED];							// The recorded ship positions, cur_frame_index is the index.
+	matrix orientations[MAX_FRAMES_RECORDED];						// The recorded ship orientations, cur_frame_index is the index. 
+	vec3d velocities[MAX_FRAMES_RECORDED];							// The recorded ship velocities (required for additive velocity shots and auto aim), cur_frame_index is the index.
 };
 
-struct oo_info_sent_to_players {
-	
-	int timestamp;					// The timestamp which is used to decide if a new packet should be sent to this player for this ship.
+// keeps track of what has been sent to each player, helps cut down on bandwidth, allowing only new information to be sent instead of old.
+struct oo_info_sent_to_players {	
+	int timestamp;					// The overall timestamp which is used to decide if a new packet should be sent to this player for this ship.
 
 	vec3d position;					// If they are stationary, there's no need to update their position.
 	float hull;						// no need to send hull if hull hasn't changed.
@@ -56,30 +56,30 @@ struct oo_info_sent_to_players {
 	// shields are a little special because they are constantly regenerating, so if they are *not* at full strength we need to send them.
 	bool perfect_shields_sent;		
 
-	int ai_mode;
-	int ai_submode;
-	int target_signature;
+	int ai_mode;					// what ai mode was last sent.
+	int ai_submode;					// what ai submode was last sent.
+	int target_signature;			// what target_signature was last sent (used for AI portion of OO packet)
 
-	SCP_vector<float> subsystems;	// We have to keep track of all subsystems.
+	SCP_vector<float> subsystems;	// We need a vector to keep track of all subsystems.
 };
 
 struct oo_netplayer_records{
 	SCP_vector<oo_info_sent_to_players> last_sent;			// Subcategory of which player did I send this info to?  Corresponds to net_player index.
-	int player_target_record[MAX_FRAMES_RECORDED];			// For rollback, we need to keep track of the player's targets. Uses frame as its index.
+	// This is not yet implemented, but may be necessary for autoaim to work in more busy scenes.  Basically, if you're switching targets,
+	// autoaim may succeed on the client but head to the wrong target on the server.
+//	int player_target_record[MAX_FRAMES_RECORDED];			// For rollback, we need to keep track of the player's targets. Uses frame as its index.
 };
 
 // Tracking Received info and timing per ship
 struct oo_packet_and_interp_tracking {
-	// arrival frame numbers 
 	int cur_pack_pos_frame;				// the last position packet arrival frame
 	int prev_pack_pos_frame;			// the prev position packet arrival frame
 
 	bool client_simulation_mode;		// if the packets come in too late, a toggle to sim things like normal
 
-	// interpolation 
 	bool prev_packet_positionless;		// a flag that marks if the last packet as having no new position or orientation info.
 
-	float pos_time_delta;				// How much time passed between position packets.
+	float pos_time_delta;				// How much time passed between position packets, in the same format as flFrametime
 	int pos_timestamp;					// Time that FSO processes the most recent position packet
 	vec3d old_packet_position;			// The last packet's pos
 	vec3d new_packet_position;			// The current packet's pos
@@ -87,81 +87,79 @@ struct oo_packet_and_interp_tracking {
 
 	angles old_angles;					// The last packet's orientation (in angles)
 	angles new_angles;					// The current packet's orientation (in angles)
-	angles anticipated_angles_a;		// What angles we expect the ship to eventually go to based on physics info.
-	angles anticipated_angles_b;		// The anticipated angles further along in the simulation than anticipated_angles_a
-	angles anticipated_angles_c;		// Further along than angles_b
-	matrix new_orientation;				// The new angles transferred to the new orientation.
+	angles anticipated_angles_a;		// The first angles we get from calculating the spline
+	angles anticipated_angles_b;		// The second angles we get from calculating the spline
+	angles anticipated_angles_c;		// The third angles we get from calculating the spline
+	matrix new_orientation;				// The "uncompressed" orientation calculated from the packet's new angles
 
 	vec3d new_velocity;					// The velocity we calculate from the packet
-	vec3d anticipated_velocity1;		// The velocity we get from interpolation 1
-	vec3d anticipated_velocity2;		// The velocity we get from interpolation 2
-	vec3d anticipated_velocity3;		// The velocity we get from interpolation 3
+	vec3d anticipated_velocity1;		// The first velocity we get from calculating the spline
+	vec3d anticipated_velocity2;		// The second velocity we get from calculating the spline
+	vec3d anticipated_velocity3;		// The third velocity we get from calculating the spline
 
-	bez_spline pos_spline;				// Points set for positional interpolation.
+	bez_spline pos_spline;				// The points we calculated which the bezier interpolation is based on.
 
 	// bashing the last received desired velocity and desired rotational velocity allows us to keep 
 	// anything unexpected messing with where this ship should be.
-	vec3d cur_pack_des_vel;
-	vec3d cur_pack_local_des_vel;		// desired velocity is in global coordinates normally, but having to go back and forth is a pain.
+	vec3d cur_pack_des_vel;				// 
+	vec3d cur_pack_local_des_vel;		// desired velocity is in global coordinates normally, but this optimizes some.
 	vec3d cur_pack_des_rot_vel;
 
 	// Frame numbers that helps us figure out if we should ignore new information coming from the server because
-	// we already received a newer packet than this one.
-	bool odd_wrap;
-	int most_recent_packet;
-	int pos_comparison_frame;
-	int prev_pos_comparison_frame;
-	int hull_comparison_frame;
-	int shields_comparison_frame;
-	SCP_vector<int> subsystems_comparison_frame;
-	int ai_comparison_frame;
-
+	// we already received a newer packet than this one for all the info, or the most specific information.
+	bool odd_wrap;						// Helps keep track of which larger wrap this ship has been updated with, odd or even. (wraps every ~65300 frames) 
+	int most_recent_packet;				// what is the seq number of the most recent packet, not worried about type of packet.
+	int pos_comparison_frame;			// what frame was the last position information received? 
+	int prev_pos_comparison_frame;		// what frame was the second to last position information received?
+	int hull_comparison_frame;			// what frame was the last hull information received?
+	int shields_comparison_frame;		// what frame was the last shield information received?
+	SCP_vector<int> subsystems_comparison_frame; // what frame was the last subsystem information received? (for each subsystem)
+	int ai_comparison_frame;			// what frame was the last ai information received?
 };
 
-// Keep track of the items we'll need to restore later.
+// Keep track of the ships we'll need to restore later after rollback is done.
 struct oo_rollback_restore_record {
-	object* roll_objp;
-	vec3d position;
-	matrix orientation;
-	vec3d velocity;
+	object* roll_objp;		// object pointer to the ship we need to restore. 
+	vec3d position;			// position to restore to
+	matrix orientation;		// orientation to restore to
+	vec3d velocity;			// velocity to restore to
 };
 
-// Keeps track
+// Keeps track of how many shots that need to be fired in rollback mode.
 struct oo_unsimulated_shots {
-	object* shooterp;		// pointer to the shooting object
-	vec3d pos;				// the relative position from the packet.
-	matrix orient;			// the relative orientation from the packet.
+	object* shooterp;		// pointer to the shooting object (ship)
+	vec3d pos;				// the relative position calculated from the non-homing packet.
+	matrix orient;			// the relative orientation from the non-homing packet.
 	bool secondary_shot;	// is this a dumbfire missile shot?
 };
 
 // our main struct for keeping track of all interpolation and oo packet info.
-struct oo_general_info{
-
+struct oo_general_info {
 	// info that helps us figure out what is the best reference object available when sending a rollback shot.
 	// We go by what is the most recent object update packet received, and then by distance.
-	int ref_timestamp;							// what time did we receive this reference object
-	ushort most_recent_updated_net_signature;
-	ushort most_recent_frame;
-	float distance_to_most_recent;
+	int ref_timestamp;							// what time did we receive the reference object
+	ushort most_recent_updated_net_signature;	// what is the net signature of the reference object.
+	ushort most_recent_frame;					// what is the frame from the update of most recently updated object.
 
 	// The previously received frametimes.  One entry for *every* frame, received or not, up to the last received frame.
 	// For frames it does not receive, it assumes that the frame time is the same as the frames around it.
 	SCP_vector<ubyte> received_frametimes;
 
-
-	// Frame tracking info.
+	// Frame tracking info, we can have up to INT_MAX frames, but to save on bandwidth and memory we have to "wrap"
+	// the index.  Cur_frame_index goes up to MAX_FRAMES_RECORDED and makes info easy to access, wrap_count counts 
+	// how many times that is reset, up to MAX_SERVER_TRACKER_SMALL_WRAPS, we multiply these two to get the seq_num
+	// sent to oo_packet recipients. larger_wrap_count allows us to figure out if we are in an "odd" larger wrap
 	int number_of_frames;									// how many frames have we gone through, total.
-	ushort wrap_count;										// how many times have we wrapped?  Just the smaller type.
 	short larger_wrap_count;								// how many of the larger wrap, used to set an OO_packet flag.
+	ushort wrap_count;										// how many times have we wrapped the cur_frame_index.
 	ubyte cur_frame_index;									// the current frame index (to access the recorded info)
 
-	int timestamps[MAX_FRAMES_RECORDED];					// The timestamp for the given frame
-	SCP_vector<oo_ship_position_records> frame_info;		// Actually keeps track of ship physics info on the server.  Uses net_signature as its index.
+	int timestamps[MAX_FRAMES_RECORDED];					// The timestamp for the recorded frame
+	SCP_vector<oo_ship_position_records> frame_info;		// Actually keeps track of ship physics info.  Uses net_signature as its index.
 	SCP_vector<oo_netplayer_records> player_frame_info;		// keeps track of player targets and what has been sent to each player. Uses player as the index
 
-	// Tracking Received info and interpolation timing per ship 
-	bool last_received_odd_wrap;							// keeps track if the serveri
-	SCP_vector<oo_packet_and_interp_tracking> interp;		// uses net_signature as its index.
+
+	SCP_vector<oo_packet_and_interp_tracking> interp;		// Tracking received info and interpolation timing per ship uses net_signature as its index.
 
 	// rollback info
 	bool rollback_mode;										// are we currently creating and moving weapons from the client primary fire packets
@@ -803,12 +801,11 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 		Oo_info.most_recent_updated_net_signature = objp->net_signature;
 		Oo_info.most_recent_frame = seq_num;
 		Oo_info.ref_timestamp = timestamp();
-		Oo_info.distance_to_most_recent = vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos);
 
 	} // if this packet is from the same frame,the closer ship makes for a slightly more accurate reference point
 	else if (seq_num == Oo_info.most_recent_frame) {
-		float temp_distance = vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos);
-		if (Oo_info.distance_to_most_recent > temp_distance) {
+		object* temp_reference_object = multi_get_network_object(Oo_info.most_recent_updated_net_signature);
+		if (( vm_vec_dist_squared(&temp_reference_object->pos, &Objects[Player->objnum].pos)> vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos)) {
 			Oo_info.most_recent_updated_net_signature = objp->net_signature;
 			Oo_info.most_recent_frame = seq_num;
 			Oo_info.ref_timestamp = timestamp();
@@ -820,7 +817,6 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 		Oo_info.most_recent_updated_net_signature = objp->net_signature;
 		Oo_info.most_recent_frame = seq_num;
 		Oo_info.ref_timestamp = timestamp();
-		Oo_info.distance_to_most_recent = vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos);
 	}
 }
 
@@ -903,7 +899,6 @@ void multi_oo_respawn_reset_info(ushort net_sig)
 
 	interp->cur_pack_des_rot_vel = vmd_zero_vector;
 	interp->cur_pack_local_des_vel = vmd_zero_vector;
-	interp->odd_wrap = Oo_info.last_received_odd_wrap; // we need to set this to match what other ships are getting
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1653,7 +1648,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 			// records so that FSO can tell that the incoming frames are newer than what it already saw.
 			if ( most_recent - seq_num > HAS_WRAPPED_MINIMUM ) {
 				interp_data->most_recent_packet = seq_num;
-				interp_data->odd_wrap = Oo_info.last_received_odd_wrap = !interp_data->odd_wrap;
+				interp_data->odd_wrap = !interp_data->odd_wrap;
 
 				interp_data->pos_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
 				interp_data->prev_pos_comparison_frame -= SERVER_TRACKER_LARGE_WRAP_TOTAL;
@@ -2440,7 +2435,6 @@ void multi_init_oo_and_ship_tracker()
 	Oo_info.ref_timestamp = -1;
 	Oo_info.most_recent_updated_net_signature = 0;
 	Oo_info.most_recent_frame = 0;
-	Oo_info.distance_to_most_recent = 0.0f;
 	Oo_info.received_frametimes.clear();
 
 	Oo_info.number_of_frames = 0;
@@ -2450,7 +2444,6 @@ void multi_init_oo_and_ship_tracker()
 	for (int i = 0; i < MAX_FRAMES_RECORDED; i++) {
 		Oo_info.timestamps[i] = MAX_TIME; // This needs to be Max time (or at least some absurdly high number) for rollback to work correctly
 	}
-	Oo_info.last_received_odd_wrap = false;
 
 	Oo_info.rollback_mode = false;
 	Oo_info.rollback_wobjp.clear();
