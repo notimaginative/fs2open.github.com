@@ -801,7 +801,7 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 	int net_sig_idx = objp->net_signature;
 
 	// see if it's more recent.  Most recent is best.
-	if (seq_num > Oo_info.most_recent_frame) {
+	if (seq_num > Oo_info.most_recent_frame || Oo_info.most_recent_updated_net_signature == 0) {
 		Oo_info.most_recent_updated_net_signature = objp->net_signature;
 		Oo_info.most_recent_frame = seq_num;
 		Oo_info.ref_timestamp = timestamp();
@@ -810,7 +810,7 @@ void multi_ship_record_rank_seq_num(object* objp, ushort seq_num)
 	else if (seq_num == Oo_info.most_recent_frame) {
 		object* temp_reference_object = multi_get_network_object(Oo_info.most_recent_updated_net_signature);
 		// check the distance
-		if ( vm_vec_dist_squared(&temp_reference_object->pos, &Objects[Player->objnum].pos) > vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos) ) {
+		if ( (temp_reference_object == nullptr) || vm_vec_dist_squared(&temp_reference_object->pos, &Objects[Player->objnum].pos) > vm_vec_dist_squared(&objp->pos, &Objects[Player->objnum].pos) ) {
 			Oo_info.most_recent_updated_net_signature = objp->net_signature;
 			Oo_info.most_recent_frame = seq_num;
 			Oo_info.ref_timestamp = timestamp();
@@ -1026,7 +1026,7 @@ int multi_oo_pack_client_data(ubyte *data, ship* shipp)
 	int packet_size = 0;
 	bool homing_secondary_firing = true;
 
-	// get our firing stuff Cyborg17 - This line is only for secondary fire, not other controls, and we are not going 
+	// get our firing stuff. Cyborg17 - This line is only for secondary fire, not other controls, and we are not going 
 	// to send firing dumbfire missiles here.  Better to send via non homing weapons packet through ship_fire_secondary()
 	if ( Weapon_info[shipp->weapons.secondary_bank_weapons[shipp->weapons.current_secondary_bank]].is_homing() ) {
 		out_flags = Net_player->s_info.accum_buttons;	
@@ -1196,7 +1196,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		packet_size += multi_oo_pack_client_data(data + packet_size + header_bytes, shipp);		
 	}		
 		
-	// position
+	// position - Now includes, position, orientation, velocity, rotational velocity, desired velocity and desired rotational velocity.
 	if ( oo_flags & OO_POS_AND_ORIENT_NEW ) {	
 		ret = (ubyte)multi_pack_unpack_position( 1, data + packet_size + header_bytes, &objp->pos );
 		packet_size += ret;
@@ -1265,10 +1265,10 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		multi_rate_add(NET_PLAYER_NUM(pl), "shl", objp->n_quadrants);	
 	}	
 
-	// Cyborg17 - only server should send
+	// Cyborg17 - only server should send this
 	// just in case we have some kind of invalid data (should've been taken care of earlier in this function)
 	if (MULTIPLAYER_MASTER && shipp->ship_info_index >= 0) {	
-	// add the # of only the subsystems being changed, and their data
+	// Cyborg17 - add the # of only the subsystems being changed, and their data
 		ship_subsys* subsystem;
 		ubyte count = 0;
 		ubyte flagged_subsystem_list[MAX_MODEL_SUBSYSTEMS];
@@ -1304,7 +1304,8 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 			}
 		}
 	}
-	
+
+	// Cyborg17 - only server should send this
 	if (oo_flags & OO_AI_NEW){
 		// ai mode info
 		ubyte umode = (ubyte)(Ai_info[shipp->ai_index].mode);
@@ -1387,7 +1388,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	return packet_size;	
 }
 
-// unpack information for a client , return bytes processed
+// unpack information for a client, return bytes processed
 int multi_oo_unpack_client_data(net_player *pl, ubyte *data, ushort seq_num)
 {
 	ushort in_flags;
@@ -1605,7 +1606,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		}
 	}
 
-	// if we can't find the object, set pointer to bogus object to continue reading the data
+	// if we can't find the object, skip the packet
 	if ( (pobjp == nullptr) || (pobjp->type != OBJ_SHIP) || (pobjp->instance < 0) || (pobjp->instance >= MAX_SHIPS) || (Ships[pobjp->instance].ship_info_index < 0) || (Ships[pobjp->instance].ship_info_index >= ship_info_size())) {
 		offset += data_size;
 		return offset;
@@ -1643,7 +1644,7 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data)
 		if (seq_num < most_recent) {
 
 			// with a new wrap, we have to adjust the individual tracker 
-			// records so that FSO can tell that the incoming frames are newer than what it already saw.
+			// records so that FSO can tell that the incoming frames after this are newer than what it already saw.
 			if ( most_recent - seq_num > HAS_WRAPPED_MINIMUM ) {
 				interp_data->most_recent_packet = seq_num;
 				interp_data->odd_wrap = !interp_data->odd_wrap;
@@ -2262,11 +2263,7 @@ int multi_oo_maybe_update(net_player *pl, object *obj, ubyte *data)
 		Oo_info.player_frame_info[pl->player_id].last_sent[net_sig_idx].target_signature = aip->target_signature;
 	}
 
-
-
-
-
-	// pack stuff only if we have to 	
+	// finally, pack stuff only if we have to 	
 	int packed = multi_oo_pack_data(pl, obj, oo_flags, data);	
 
 	// bytes packed
@@ -2473,8 +2470,6 @@ void multi_init_oo_and_ship_tracker()
 	int cur = 0;
 	oo_info_sent_to_players temp_sent_to_player;
 
-	// if the last packet sent perfect shields, we may not need to send them again.
-	//SCP_vector<ubyte> subsystems;	// See if *any* of the subsystems changed, so we have to allow for a variable number of subsystems within a variable number of ships.
 	temp_sent_to_player.timestamp = timestamp(cur);
 	temp_sent_to_player.position = vmd_zero_vector;
 	temp_sent_to_player.hull = 0.0f;
@@ -2482,6 +2477,8 @@ void multi_init_oo_and_ship_tracker()
 	temp_sent_to_player.ai_submode = -1;
 	temp_sent_to_player.target_signature = 0;
 	temp_sent_to_player.perfect_shields_sent = false;
+
+	// See if *any* of the subsystems changed, so we have to allow for a variable number of subsystems within a variable number of ships.
 	temp_sent_to_player.subsystems.reserve(MAX_MODEL_SUBSYSTEMS);
 	temp_sent_to_player.subsystems.push_back(0.0f);
 
@@ -2492,7 +2489,7 @@ void multi_init_oo_and_ship_tracker()
 		Oo_info.player_frame_info.push_back(temp_netplayer_records);
 	}
 
-	// create a temporary struct and then stuff it for all ships.
+	// create a temporary struct and then push it to the vector
 	oo_packet_and_interp_tracking temp_interp;
 
 	temp_interp.cur_pack_pos_frame = -1;
@@ -2997,7 +2994,7 @@ int multi_oo_is_interp_object(object *objp)
 	return 1;
 }
 
-// interp
+// Calculate the physics info in the current frame for a ship based on the data calculated in multi_oo_calc_interp_splines
 void multi_oo_interp(object* objp)
 {
 	// make sure its a valid ship
@@ -3020,7 +3017,6 @@ void multi_oo_interp(object* objp)
 
 	vec3d store_old_pos = objp->pos, store_old_vel = objp->phys_info.vel;
 	int net_sig_idx = objp->net_signature;
-	float record_time_factor = 0.0f;
 
 	oo_packet_and_interp_tracking* interp_data = &Oo_info.interp[net_sig_idx];
 
@@ -3040,32 +3036,34 @@ void multi_oo_interp(object* objp)
 		// figure out how much time has passed
 		int temp_numerator = timestamp() - interp_data->pos_timestamp;
 
-		// add the ~1/3 of ping to keep the players in better sync
+		// add the ~1/2 of ping to keep the players in better sync
 		if (MULTIPLAYER_MASTER) {
 			int player_id = multi_find_player_by_net_signature(net_sig_idx);
-			temp_numerator += Net_players[player_id].s_info.ping.ping_avg / 3;
+			temp_numerator += Net_players[player_id].s_info.ping.ping_avg / 2;
 		}
 		else {
-			temp_numerator += Net_players[0].s_info.ping.ping_avg / 3;
+			temp_numerator += Net_players[0].s_info.ping.ping_avg / 2;
 		}
 
-		// divide in order to 
+		// divide in order to change to flFrametime format
 		float time_elapsed = i2fl(temp_numerator) / TIMESTAMP_FREQUENCY;
 
 		// Cyborg17 - Here's the new timing calculation: we subtract the last packet's arrival time 
-		// from the current timestamp to see how long it's been and add 1/3 of the current ping, and 
-		// then we divide by the difference in time between the last two packets. This gives us a 
-		// percent that tells us, for example, "35% of the time has elapsed until when we expect the next packet."
-		float time_factor = record_time_factor = (time_elapsed / packet_delta) + 1.0f;
-		// if there was no movement, bash bash bash
+		// from the current timestamp to see how long it's been and add 1/2 of the current ping, and 
+		// then we divide by the difference in time between the last two packets.
+		// We add one because we do not want to go back into data from before the current packet was received.
+		float time_factor = (time_elapsed / packet_delta) + 1.0f;
+
+		// if there was no movement, bash position and velocity, rotation is handled after.
 		if (interp_data->prev_packet_positionless) {
+			interp_data->client_simulation_mode = false;
 			objp->pos = interp_data->new_packet_position;
 			objp->orient = interp_data->new_orientation;
-
+			objp->phys_info.vel = vmd_zero_vector;
 		} // Overshoting in this frame or some edge case bug. Just sim the ship from the known values.
-		else if (time_factor > 4.0f || time_factor < 0.0f) {
-			// Run the simulation the best we can.
-			// if transitioning to the normal, we need to jump to the end of the simulated points and then simulate forward some if there's extra time. 
+		else if (time_factor > 4.0f || time_factor < 1.0f) {
+			// if transitioning to uninterpolated movement, we need to jump to the end of the simulated points 
+			// and then simulate forward some if there's extra time. 
 			float regular_sim_delta;
 
 			if (!interp_data->client_simulation_mode) {
@@ -3192,6 +3190,7 @@ void multi_oo_interp(object* objp)
 	objp->phys_info.fspeed = vm_vec_dot(&objp->orient.vec.fvec, &objp->phys_info.vel);
 }
 
+// Establish the values that FSO will later interpolate with based on packet data.
 void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info *new_phys_info)
 {
 	Assert(objp != nullptr);
@@ -3211,56 +3210,60 @@ void multi_oo_calc_interp_splines(object* objp, matrix *new_orient, physics_info
 
 	Oo_info.interp[net_sig_idx].pos_time_delta = delta;
 
-	// get the spline representing where this new point tells us we'd be heading
-	vec3d a, b, c;
-	vec3d *pts[3] = {&a, &b, &c};
-	matrix m_copy;
-	physics_info p_copy;
+	// create the vector which will hold the spline
+	vec3d point1, point2, point3;
+	vec3d *pts[3] = {&point1, &point2, &point3};
+	matrix matrix_copy;
+	physics_info physics_copy;
 
-	// 3 point curve, but 5 time periods.  So a is 1 delta before (prev packet positon), b is 1 delta ahead, c is 3 deltas ahead.  
-	// This is to allow for the time period to be even between the three interpolation points.
-	// All angles will be recorded because our "slerp" function is not all that great, honestly.
+	// 3 point curve, 5 time deltas. Point1 is 1 delta before (prev packet positon), point2 is 1 delta ahead, 
+	// point3 is 3 deltas ahead. This is to allow for the time period to be even between the three interpolation points,
+	// while also doing interpolation for a longer period of time.
 
-	a = Oo_info.interp[net_sig_idx].old_packet_position;
-	b = Oo_info.interp[net_sig_idx].new_packet_position; 
-	m_copy = *new_orient;
-	p_copy = *new_phys_info;
-	Oo_info.interp[net_sig_idx].new_velocity = p_copy.vel;
+	point1 = Oo_info.interp[net_sig_idx].old_packet_position;
+	point2 = Oo_info.interp[net_sig_idx].new_packet_position; 
+	matrix_copy = *new_orient;
+	physics_copy = *new_phys_info;
+	Oo_info.interp[net_sig_idx].new_velocity = physics_copy.vel;
 
-	angles ang_estimated;
-	// Calculate up to 1 delta past the packet, then store b as point two in the bezier, and the angles.
-	physics_sim(&b, &m_copy, &p_copy, delta);			
-	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
+	angles angle_equivalent;
+
+	// ------------ CALCUATION 1 ------------ //
+	// Calculate up to 1 delta past the packet, then store point2 as point two in the bezier, and the angles.
+	physics_sim(&point2, &matrix_copy, &physics_copy, delta);			
+	vm_extract_angles_matrix_alternate(&angle_equivalent, &matrix_copy);
 
 	// Adjust desired velocity, because it's in world coordinates, and it doesn't make sense to reuse the same one four more times.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&physics_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &matrix_copy);
 
-	Oo_info.interp[net_sig_idx].anticipated_angles_a = ang_estimated;
+	Oo_info.interp[net_sig_idx].anticipated_angles_a = angle_equivalent;
 
-	// Since b is calculated, pass it off to point c to finish off the calculations 
-	c = b;
+	// Since point2 is calculated, pass it off to point3 to finish off the calculations, which is 2 more deltas later
+	point3 = point2;
 
-	Oo_info.interp[net_sig_idx].anticipated_velocity1 = p_copy.vel;
+	// ------------ CALCUATION 2 ------------ //
+
+	Oo_info.interp[net_sig_idx].anticipated_velocity1 = physics_copy.vel;
 	
-	// Calculate up to 2 deltas past the packet, but only the angles get stored here.
-	physics_sim(&c, &m_copy, &p_copy, delta);			
-	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
+	// Only the angles get stored here.
+	physics_sim(&point3, &matrix_copy, &physics_copy, delta);			
+	vm_extract_angles_matrix_alternate(&angle_equivalent, &matrix_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&physics_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &matrix_copy);
 
-	Oo_info.interp[net_sig_idx].anticipated_angles_b = ang_estimated;
-	Oo_info.interp[net_sig_idx].anticipated_velocity2 = p_copy.vel;
+	Oo_info.interp[net_sig_idx].anticipated_angles_b = angle_equivalent;
+	Oo_info.interp[net_sig_idx].anticipated_velocity2 = physics_copy.vel;
 
-
-	physics_sim(&c, &m_copy, &p_copy, delta);			
-	vm_extract_angles_matrix_alternate(&ang_estimated, &m_copy);
+	// ------------ CALCUATION 3 ------------ //
+	physics_sim(&point3, &matrix_copy, &physics_copy, delta);			
+	vm_extract_angles_matrix_alternate(&angle_equivalent, &matrix_copy);
 
 	// Readjust desired velocity, assuming that you would have the same throttle.
-	vm_vec_unrotate(&p_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &m_copy);
+	vm_vec_unrotate(&physics_copy.desired_vel, &Oo_info.interp[net_sig_idx].cur_pack_local_des_vel, &matrix_copy);
 
-	Oo_info.interp[net_sig_idx].anticipated_angles_c = ang_estimated;
-	Oo_info.interp[net_sig_idx].anticipated_velocity3 = p_copy.vel;
+	Oo_info.interp[net_sig_idx].anticipated_angles_c = angle_equivalent;
+	Oo_info.interp[net_sig_idx].anticipated_velocity3 = physics_copy.vel;
 
 	// Set the points to the bezier
 	Oo_info.interp[net_sig_idx].pos_spline.bez_set_points(3, pts);
@@ -3289,7 +3292,7 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx)
 	int frame_time = Oo_info.received_frametimes[old_frame];
 
 	// add up the frametimes in between, not including the old_frame's frametime because that was the amount of time from
-	// old_frame -1 to old_frame.
+	// the frame before that to the old_frame.
 	for (int i = old_frame + 1; i <= new_frame; i++) {
 		// a zero value means we haven't received that frame yet.
 		if (Oo_info.received_frametimes[i] > 0) {
