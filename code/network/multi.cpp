@@ -1230,10 +1230,10 @@ void multi_do_frame()
 				}
 			} else if ( !(Player_ship->is_departing() ) ){
 				// if the rate limiting system says its ok
-				if(multi_oo_cirate_can_send()){
+//				if(multi_oo_cirate_can_send()){
 					// use the new method
-					multi_oo_send_control_info();
-				}				
+					multi_oo_send_control_info(); // Cyborg17 - Don't limit clients updating themselves.
+//				}				
 			}
 
 			// bytes received info
@@ -1299,6 +1299,11 @@ void multi_do_frame()
 	
 	// process any tracker messages
 	multi_fs_tracker_process();
+
+	// Cyborg17 update the new frame recording system for accurate client shots, needs to go after most everything else in multi.
+	if (Game_mode & GM_IN_MISSION) {
+		multi_ship_record_increment_frame();
+	}
 
 	// if on the standalone, do any gui stuff
 	if (Game_mode & GM_STANDALONE_SERVER) {
@@ -1784,9 +1789,6 @@ void multi_reset_timestamps()
 
 	// reset standalone gui timestamps (these are not game critical, so there is not much danger)
 	std_reset_timestamps();
-
-	// initialize all object update timestamps
-	multi_oo_gameplay_init();
 }
 
 // netgame debug flags for debug console stuff

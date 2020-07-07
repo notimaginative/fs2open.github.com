@@ -28,7 +28,7 @@ struct server_item;
 class ship_info;
 class p_object;
 
-// two types of signatures that we can request,  permanent signatures are all below 1000.  non-permanent are above 1000
+// two types of signatures that we can request,  permanent signatures are all below 5000.  non-permanent are above 5000
 #define MULTI_SIG_SHIP					1
 #define MULTI_SIG_ASTEROID				2
 #define MULTI_SIG_NON_PERMANENT		3
@@ -186,33 +186,22 @@ void multi_get_mission_checksum(const char *filename);
 
 // Packs/unpacks an object position.
 // Returns number of bytes read or written.
-#define OO_POS_RET_SIZE							9
 int multi_pack_unpack_position(int write, ubyte *data, vec3d *pos);
 
 // Packs/unpacks an orientation matrix.
 // Returns number of bytes read or written.
-#define OO_ORIENT_RET_SIZE						6
-int multi_pack_unpack_orient(int write, ubyte *data, matrix *orient);
+int multi_pack_unpack_orient(int write, ubyte *data, angles *angles_out);
 
 // Packs/unpacks velocity
 // Returns number of bytes read or written.
-#define OO_VEL_RET_SIZE							4
-int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi);
-
-// Packs/unpacks desired_velocity
-// Returns number of bytes read or written.
-#define OO_DESIRED_VEL_RET_SIZE				3
-int multi_pack_unpack_desired_vel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi, ship_info *sip);
+int multi_pack_unpack_vel(int write, ubyte *data, matrix *orient, physics_info *pi);
 
 // Packs/unpacks rotational velocity
 // Returns number of bytes read or written.
-#define OO_ROTVEL_RET_SIZE						4
-int multi_pack_unpack_rotvel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi);
+int multi_pack_unpack_rotvel(int write, ubyte *data, physics_info *pi);
 
-// Packs/unpacks desired rotvel
-// Returns number of bytes read or written.
-#define OO_DESIRED_ROTVEL_RET_SIZE			3
-int multi_pack_unpack_desired_rotvel(int write, ubyte *data, matrix *orient, vec3d *pos, physics_info *pi, ship_info *sip);
+// Cyborg17 - Packs/unpacks desired velocity and rotational velocity.
+ubyte multi_pack_unpack_desired_vel_and_desired_rotvel(int write, ubyte* data, physics_info* pi, vec3d* local_desired_vel);
 
 char multi_unit_to_char(float unit);
 float multi_char_to_unit(float val);
