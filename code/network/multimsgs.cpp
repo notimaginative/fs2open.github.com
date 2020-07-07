@@ -7638,7 +7638,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	// Save the transposed matrix so that we can optimize and use it twice.
 	matrix ref_ori;
-	vm_copy_transpose(&ref_ori, &objp->orient);
+	vm_copy_transpose(&ref_ori, &ref_objp->orient);
 
 	vec3d ref_to_ship_vec, temp;
 
