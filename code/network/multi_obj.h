@@ -27,7 +27,7 @@ struct weapon;
 
 
 // client button info flags
-#define OOC_FIRE_SECONDARY			(1<<0)
+#define OOC_FIRE_CONTROL_PRESSED	(1<<0)
 #define OOC_TARGET_LOCKED			(1<<1)
 #define OOC_TARGET_SEEK_LOCK		(1<<2)
 #define OOC_LOCKING_ON_CENTER		(1<<3)
@@ -40,6 +40,11 @@ struct weapon;
 // Cyborg17, Server will be tracking only the last second of frames
 #define MAX_FRAMES_RECORDED		30
 #define PRIMARY_PACKET_CUTOFF			2000
+
+// and two special values to help with multilock
+#define OOC_INDEX_NULLPTR_SUBSYSEM 255
+#define OOC_MAX_LOCKS			   128  // Probably *could* be up to 140, but this is safer
+
 
 // ---------------------------------------------------------------------------------------------------
 // POSITION AND ORIENTATION RECORDING
