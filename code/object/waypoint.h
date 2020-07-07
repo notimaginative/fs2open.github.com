@@ -25,6 +25,7 @@ class waypoint
 	private:
 		vec3d m_position;
 		int objnum;
+		ushort net_signature;
 		waypoint_list *m_parent_list;
 
 	friend void waypoint_create_game_object(waypoint *wpt, int list_index, int wpt_index);

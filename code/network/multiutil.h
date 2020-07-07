@@ -33,6 +33,7 @@ class p_object;
 #define MULTI_SIG_ASTEROID				2
 #define MULTI_SIG_NON_PERMANENT		3
 #define MULTI_SIG_DEBRIS				4
+#define MULTI_SIG_WAYPOINT				5				// Added for dynamic waypoints in multiplayer missions
 
 extern ushort multi_assign_network_signature( int what_kind );
 extern ushort multi_get_next_network_signature( int what_kind );

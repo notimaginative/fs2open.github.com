@@ -213,6 +213,7 @@ void multi_vars_init()
 	Next_asteroid_signature = ASTEROID_SIG_MIN;
 	Next_non_perm_signature = NPERM_SIG_MIN;   
 	Next_debris_signature = DEBRIS_SIG_MIN;
+	Next_waypoint_signature = WAYPOINT_SIG_MIN;
 	
 	// server-client critical stuff
 	Multi_button_info_ok = 0;
