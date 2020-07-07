@@ -22,6 +22,7 @@
 #include "network/multi_rate.h"
 #include "network/multi.h"
 #include "object/object.h"
+#include "object/objcollide.h"		// for multi rollback collisions
 #include "object/objectshield.h"
 #include "ship/ship.h"
 #include "playerman/player.h"
@@ -30,7 +31,7 @@
 #include "ship/afterburner.h"
 #include "cfile/cfile.h"
 #include "debugconsole/console.h"
-
+#include "weapon/weapon.h"
 
 // ---------------------------------------------------------------------------------------------------
 // OBJECT UPDATE STRUCTS
@@ -187,6 +188,17 @@ int multi_find_prev_frame_idx();
 // quickly lookup how much time has passed since the given frame.
 uint multi_ship_record_get_time_elapsed(int original_frame, int new_frame);
 
+// fire the rollback weapons that are in the rollback struct
+void multi_oo_fire_rollback_shots(int frame_idx);
+
+// moves all rollbacked ships back to the original frame
+void multi_oo_restore_frame(int frame_idx);
+
+// pushes the rollback weapons forward for a single rollback frame.
+void multi_oo_simulate_rollback_shots(int frame_idx);
+
+// restores ships to the positions they were in bedfore rollback.
+void multi_record_restore_positions();
 
 // See if a newly arrived packet is a good new option as a reference object
 void multi_ship_record_rank_seq_num(object* objp, ushort seq_num);
@@ -401,14 +413,14 @@ void multi_ship_record_update_all()
 	object* objp;
 
 	for (ship & cur_ship : Ships) {
-		
+		// apparently this occasionally happens.
 		if (cur_ship.objnum == -1) {
 			continue;
 		}		
 		
 		objp = &Objects[cur_ship.objnum];
 
-		if (objp == nullptr) {
+		if (objp == nullptr || objp->type != OBJ_SHIP) {
 			continue;
 		}
 		 
@@ -562,6 +574,220 @@ int multi_ship_record_find_time_after_frame(int starting_frame, int ending_frame
 
 	int return_value = time_elapsed - (Oo_info.timestamps[ending_frame] - Oo_info.timestamps[starting_frame]);
 	return return_value;
+}
+
+// Returns whether weapons currently being created should be part of the rollback simulation.
+bool multi_ship_record_get_rollback_wep_mode() 
+{
+	return Oo_info.rollback_mode;
+}
+
+// Adds an object pointer to the list of weapons that needs to be simulated as part of rollback.
+void multi_ship_record_add_rollback_wep(int wep_objnum) 
+{
+	object* wobjp = &Objects[wep_objnum];
+
+	// check for valid pointer
+	if (wobjp == nullptr){
+		mprintf(("Nullptr when trying to add weapons to the weapon rollback tracker.\n"));
+		return;
+	}
+	
+	// add it to the list of weapons we'll need to add to the simulation.
+	Oo_info.rollback_wobjp_created_this_frame.push_back(wobjp);
+}
+
+// This stores the information we got from the client to create later, and checks to see if this is the oldest shot we are going to fire during rollback.
+void multi_ship_record_add_rollback_shot(object* pobjp, vec3d* pos, matrix* orient, int frame, bool secondary) 
+{
+	Oo_info.rollback_mode = true;
+
+	oo_unsimulated_shots new_shot;
+	new_shot.shooterp = pobjp;
+	new_shot.pos = *pos;
+	new_shot.orient = *orient;
+	new_shot.secondary_shot = secondary;
+
+	Oo_info.rollback_shots_to_be_fired[frame].push_back(new_shot);	
+}
+
+// Manage rollback for a frame
+void multi_ship_record_do_rollback() 
+{	
+	// only rollback if there are shots to simulate.
+	if (!Oo_info.rollback_mode) {
+		return;
+	}
+	nprintf(("Network","At least one multiplayer rollback shot is being simulated this frame.\n"));
+	int net_sig_idx;
+	object* objp;
+
+	// set up all restore points and ship portion of the collision list
+	for (ship& cur_ship : Ships) {
+
+		// once this happens, we've run out of ships.
+		if (cur_ship.objnum < 0) {
+			break;
+		}
+
+		objp = &Objects[cur_ship.objnum];
+		if (objp == nullptr) {
+			continue;
+		}
+
+		net_sig_idx = objp->net_signature;
+
+		// this should not happen, but it would not access correct info. 
+		//It only means a less accurate simulation (and a mystery), not a crash. So, for now, write to the log. 
+		if (net_sig_idx < 1) {
+			mprintf(("Rollback ship does not have a net signature.  Someone should probably investigate this at some point.\n"));
+			continue;
+		}
+
+		// also, we must *not* attempt to rollback the standalone ship 
+		if (net_sig_idx == STANDALONE_SHIP_SIG) {
+			continue;
+		}
+
+		Oo_info.rollback_ships.push_back(objp);
+
+		oo_rollback_restore_record restore_point;
+
+		restore_point.roll_objp = objp;
+		restore_point.position = objp->pos;
+		restore_point.orientation = objp->orient;
+		restore_point.velocity = objp->phys_info.vel;
+
+		Oo_info.restore_points.push_back(restore_point);
+		// Also take this opportunity to set up their collision 
+		Oo_info.rollback_collide_list.push_back(OBJ_INDEX(objp));
+	}
+
+	// now we need to figure out which frame will start the rollback simulation
+	int frame_idx = Oo_info.cur_frame_index + 1;
+	if (frame_idx >= MAX_FRAMES_RECORDED) {
+		frame_idx = 0;
+	}
+
+	// loop through them
+	while (frame_idx != Oo_info.cur_frame_index) {
+		if (Oo_info.rollback_shots_to_be_fired[frame_idx].size() > 0) {
+			break;
+		}
+		frame_idx++;
+		if (frame_idx >= MAX_FRAMES_RECORDED) {
+			frame_idx = 0;
+		}
+	}
+
+	// make sure we found one.
+	Assertion(frame_idx != Oo_info.cur_frame_index, "Rollback was called without there being a rollback shot to simulate. This is a coder error. Please report!");
+
+	if (frame_idx == Oo_info.cur_frame_index) {
+		return;
+	}
+
+	do {
+		// move all ships to their recorded positions
+		multi_oo_restore_frame(frame_idx);
+
+		// push weapons forward for the frame (weapons do not get pushed forward for the first frame of their existence)
+		multi_oo_simulate_rollback_shots(frame_idx);
+
+		// then fire all shots for the frame, primary and secondary, if there are any
+		multi_oo_fire_rollback_shots(frame_idx);
+
+		// perform collision detection for that frame.
+		obj_sort_and_collide(Oo_info.rollback_collide_list);
+
+		//increment the frame
+		frame_idx++;
+		if (frame_idx >= MAX_FRAMES_RECORDED) {
+			frame_idx = 0;
+		}
+
+	} while (frame_idx != Oo_info.cur_frame_index);
+
+	// restore the old frame
+	multi_record_restore_positions();
+
+	// clean up the rollback info that has been taken care of.
+	Oo_info.rollback_collide_list.clear();
+	Oo_info.rollback_mode = false;
+	Oo_info.rollback_ships.clear();
+	for (int i = 0; i < MAX_FRAMES_RECORDED; i++){ 
+		Oo_info.rollback_shots_to_be_fired[i].clear();
+	}
+	Oo_info.rollback_wobjp.clear();
+}
+
+// fires the rollback weapons that are in the rollback struct
+void multi_oo_fire_rollback_shots(int frame_idx)
+{
+	for (auto rollback_shot = Oo_info.rollback_shots_to_be_fired[frame_idx].begin(); rollback_shot != Oo_info.rollback_shots_to_be_fired[frame_idx].end(); rollback_shot++) {
+		rollback_shot->shooterp->pos = rollback_shot->pos;
+		rollback_shot->shooterp->orient = rollback_shot->orient;
+		if (rollback_shot->secondary_shot) {
+			ship_fire_secondary(rollback_shot->shooterp, 1, true);
+		}
+		else {
+			ship_fire_primary(rollback_shot->shooterp, 0, 1, true);
+		}
+	}
+
+	// add the newly created shots to the collision list.
+	for (auto & wobjp : Oo_info.rollback_wobjp_created_this_frame) {
+		Oo_info.rollback_wobjp.push_back(wobjp);
+		Assertion(wobjp != nullptr, "Somehow FSO added a nullptr to a list of weapons it is supposed to rollback.");
+		Oo_info.rollback_collide_list.push_back(OBJ_INDEX(wobjp));
+	}
+	Oo_info.rollback_wobjp_created_this_frame.clear();
+}
+
+// moves all rollbacked ships back to the original frame
+void multi_oo_restore_frame(int frame_idx)
+{
+	// set the position, orientation, and velocity for each object
+	for (auto& objp : Oo_info.rollback_ships) {
+		Assertion(objp != nullptr, "Nullptr somehow got into the rollback ship vector, please report!");
+		objp->pos = Oo_info.frame_info[objp->net_signature].positions[frame_idx];
+		objp->orient = Oo_info.frame_info[objp->net_signature].orientations[frame_idx];
+		objp->phys_info.vel = Oo_info.frame_info[objp->net_signature].velocities[frame_idx];
+	}
+}
+
+// pushes the rollback weapons forward for a single rollback frame.
+void multi_oo_simulate_rollback_shots(int frame_idx) 
+{
+	int prev_frame = frame_idx - 1;
+	if (prev_frame < 0) {
+		prev_frame = MAX_FRAMES_RECORDED - 1;
+	}
+
+	// calculate the float version of the frametime.
+	float frametime = (float)multi_ship_record_get_time_elapsed(prev_frame, frame_idx) / (float)TIMESTAMP_FREQUENCY;
+
+	// push the weapons forward.
+	for (auto& objp : Oo_info.rollback_wobjp) {
+		Assertion(objp != nullptr, "Nullptr somehow got into the rollback weapon vector, please report!");
+		vm_vec_scale_add2(&objp->pos, &objp->phys_info.vel, frametime);
+		Weapons[objp->instance].lifeleft -= frametime;
+	}
+}
+
+// restores ships to the positions they were in bedfore rollback.
+void multi_record_restore_positions() 
+{
+	for (auto restore_point : Oo_info.restore_points) {
+
+		object* objp = restore_point.roll_objp;
+		// reset the position, orientation, and velocity for each object
+		objp->pos = restore_point.position;
+		objp->orient = restore_point.orientation;
+		objp->phys_info.vel = restore_point.velocity;
+	}
+
+	Oo_info.restore_points.clear();
 }
 
 // ---------------------------------------------------------------------------------------------------
