@@ -3619,7 +3619,7 @@ int multi_pack_unpack_rotvel( int write, ubyte *data, physics_info *pi)
 	}
 }
 
-ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, physics_info *pi, vec3d* local_desired_vel)
+ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, bool full_physics, ubyte *data, physics_info *pi, vec3d* local_desired_vel)
 {
 	bitbuffer buf;
 
@@ -3628,26 +3628,28 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 	int a = 0, b = 0, c = 0;
 	int d = 0, e = 0, f = 0;
 
-	if ( write )	{
-		// output desired rotational velocity
-		if (pi->max_rotvel.xyz.x > 0.0f) {
-			a = fl2i(round( (pi->desired_rotvel.xyz.x / pi->max_rotvel.xyz.x) * 15.0f)); 
-		}
+	if (write) {
+		// output desired rotational velocity if this ship uses it.
+		if (full_physics) {
+			if (pi->max_rotvel.xyz.x > 0.0f) {
+				a = fl2i(round((pi->desired_rotvel.xyz.x / pi->max_rotvel.xyz.x) * 31.0f));
+			}
 
-		if (pi->max_rotvel.xyz.y > 0.0f) {
-			b = fl2i(round( (pi->desired_rotvel.xyz.y / pi->max_rotvel.xyz.y) * 15.0f));
-		}
+			if (pi->max_rotvel.xyz.y > 0.0f) {
+				b = fl2i(round((pi->desired_rotvel.xyz.y / pi->max_rotvel.xyz.y) * 31.0f));
+			}
 
-		if (pi->max_rotvel.xyz.z > 0.0f) {
-			c = fl2i(round( (pi->desired_rotvel.xyz.z / pi->max_rotvel.xyz.z) * 15.0f));
-		}
+			if (pi->max_rotvel.xyz.z > 0.0f) {
+				c = fl2i(round((pi->desired_rotvel.xyz.z / pi->max_rotvel.xyz.z) * 7.0f));
+			}
 
-		CAP(a,-15,15);
-		CAP(b,-15,15);
-		CAP(c,-15,15);
-		bitbuffer_put( &buf, (uint)a,5);
-		bitbuffer_put( &buf, (uint)b,5);
-		bitbuffer_put( &buf, (uint)c,5);
+			CAP(a, -31, 31);
+			CAP(b, -31, 31);
+			CAP(c, -7, 7);
+			bitbuffer_put(&buf, (uint)a, 6);
+			bitbuffer_put(&buf, (uint)b, 6);
+			bitbuffer_put(&buf, (uint)c, 4);
+		}
 
 		// pack desired velocity.
 		if (pi->max_vel.xyz.x > 0.0f) {
@@ -3659,36 +3661,37 @@ ubyte multi_pack_unpack_desired_vel_and_desired_rotvel( int write, ubyte *data, 
 		}
 		// for z velocity, take into account afterburner.
 		if (pi->max_vel.xyz.z > 0.0f) {
-			f = fl2i(round( (local_desired_vel->xyz.z / pi->afterburner_max_vel.xyz.z) * 255.0f));
+			f = fl2i(round( (local_desired_vel->xyz.z / pi->afterburner_max_vel.xyz.z) * 127.0f));
 		}
 
 		CAP(d,-7,7);
 		CAP(e,-7,7);
-		CAP(f,-255,255);
+		CAP(f,-127,127);
 		bitbuffer_put( &buf, (uint)d,4);
 		bitbuffer_put( &buf, (uint)e,4);
-		bitbuffer_put( &buf, (uint)f,9);
+		bitbuffer_put( &buf, (uint)f,8);
 
 
 
 		return (ubyte)bitbuffer_write_flush(&buf);
 	} else {
-
-		// unpack desired rotational velocity
-		a = bitbuffer_get_signed(&buf,5);
-		b = bitbuffer_get_signed(&buf,5);
-		c = bitbuffer_get_signed(&buf,5);
-		pi->rotvel.xyz.x = pi->max_rotvel.xyz.x * i2fl(a)/15.0f;
-		pi->rotvel.xyz.y = pi->max_rotvel.xyz.y * i2fl(b)/15.0f;
-		pi->rotvel.xyz.z = pi->max_rotvel.xyz.z * i2fl(c)/15.0f;
+		if (full_physics) {
+			// unpack desired rotational velocity
+			a = bitbuffer_get_signed(&buf, 6);
+			b = bitbuffer_get_signed(&buf, 6);
+			c = bitbuffer_get_signed(&buf, 4);
+			pi->rotvel.xyz.x = pi->max_rotvel.xyz.x * i2fl(a) / 31.0f;
+			pi->rotvel.xyz.y = pi->max_rotvel.xyz.y * i2fl(b) / 31.0f;
+			pi->rotvel.xyz.z = pi->max_rotvel.xyz.z * i2fl(c) / 7.0f;
+		}
 
 		// unpack desired velocity
 		d = bitbuffer_get_signed(&buf,4);
 		e = bitbuffer_get_signed(&buf,4);
-		f = bitbuffer_get_signed(&buf,9);
+		f = bitbuffer_get_signed(&buf,8);
 		local_desired_vel->xyz.x = pi->max_vel.xyz.x * i2fl(d)/7.0f;
 		local_desired_vel->xyz.y = pi->max_vel.xyz.y * i2fl(e)/7.0f;
-		local_desired_vel->xyz.z = pi->afterburner_max_vel.xyz.z * i2fl(f)/255.0f;
+		local_desired_vel->xyz.z = pi->afterburner_max_vel.xyz.z * i2fl(f)/127.0f;
 
 
 		return (ubyte)bitbuffer_read_flush(&buf);
