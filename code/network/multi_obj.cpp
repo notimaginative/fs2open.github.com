@@ -220,18 +220,19 @@ float multi_oo_calc_pos_time_difference(int net_sig_idx);
 #define OO_POS_UPDATE_TOLERANCE	150.0f
 
 // new improved - more compacted info type
-#define OO_POS_AND_ORIENT_NEW		(1<<0)		// To update position and orientation. Because getting accurate velocity requires orientation, and accurate orienation requires velocity
-#define OO_HULL_NEW					(1<<1)		// To Update Hull
-#define OO_SHIELDS_NEW				(1<<2)		// To Update Shields.
-#define OO_AFTERBURNER_NEW			(1<<3)		// Flag for Afterburner hack
-#define OO_SUBSYSTEMS_NEW			(1<<4)		// Send Subsystem Info
-#define OO_PRIMARY_BANK				(1<<5)		// if this is set, fighter has selected bank one
-#define OO_PRIMARY_LINKED			(1<<6)		// if this is set, banks are linked
-#define OO_TRIGGER_DOWN				(1<<7)		// if this is set, trigger is DOWN
-#define OO_SUPPORT_SHIP				(1<<8)		// Send extra info for the support ship.
-#define OO_AI_NEW					(1<<9)		// Send updated AI Info
-#define OO_ODD_WRAP					(1<<10)		// Is the sent frame an odd wrap? Initially not wrapped (0), then odd wrap (1), etc.
-#define OO_FULL_PHYSICS				(1<<11)		// Since AI don't use certain phys_info values, have a flag for them.
+#define OO_ODD_WRAP					(1<<0)		// Is the sent frame an odd wrap? Initially not wrapped (0), then odd wrap (1), etc.
+#define OO_POS_AND_ORIENT_NEW		(1<<1)		// To update position and orientation. Because getting accurate velocity requires orientation, and accurate orienation requires velocity
+#define OO_FULL_PHYSICS				(1<<2)		// Since AI don't use all phys_info values, we need a flag to confirm when all have been transmitted.
+#define OO_HULL_NEW					(1<<3)		// To Update Hull
+#define OO_SHIELDS_NEW				(1<<4)		// To Update Shields.
+#define OO_SUBSYSTEMS_NEW			(1<<5)		// Send Subsystem Info
+#define OO_ANIMATION				(1<<6)		// Subsystem Animation info
+#define OO_AI_NEW					(1<<7)		// Send updated AI Info
+#define OO_AFTERBURNER_NEW			(1<<8)		// Flag for Afterburner hack
+#define OO_PRIMARY_BANK				(1<<9)		// if this is set, fighter has selected bank one
+#define OO_PRIMARY_LINKED			(1<<10)		// if this is set, banks are linked
+#define OO_TRIGGER_DOWN				(1<<11)		// if this is set, trigger is DOWN
+#define OO_SUPPORT_SHIP				(1<<12)		// Send extra info for the support ship.
 
 
 #define OO_SUBSYS_HEALTH			(1<<0)		// Did this subsystem's health change
