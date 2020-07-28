@@ -1163,6 +1163,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	// putting this in the position bucket because it's mainly to help with position interpolation
 	multi_rate_add(NET_PLAYER_NUM(pl), "pos", 1);
 
+
 	// if we're a client (and therefore sending control info), pack client-specific info
 	if((Net_player != nullptr) && !(Net_player->flags & NETINFO_FLAG_AM_MASTER)){
 		packet_size += multi_oo_pack_client_data(data + packet_size + header_bytes);		
@@ -1207,7 +1208,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 
 		vm_vec_rotate(&local_desired_vel, &objp->phys_info.desired_vel, &objp->orient);
 
-		// is this a ship that uses all phyiscs? (only applies to player-controled for now)
+		// is this a ship with full phyiscs? (just player-controled for now)
 		bool full_physics = false;
 		if (objp->flags[Object::Object_Flags::Player_ship]) {
 			full_physics = true;
@@ -1250,7 +1251,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 	// Cyborg17 - add the # of only the subsystems being changed, and their data
 		ship_subsys* subsystem_pointer_list[MAX_MODEL_SUBSYSTEMS];
 		ubyte subsys_index[MAX_MODEL_SUBSYSTEMS], flags[MAX_MODEL_SUBSYSTEMS];
-		short total_size_health = 0, total_size_anim = 0;
+		short total_size = 0;
 		ubyte i = 0, count = 0;
 		bool flagged = false;
 		vec3d temp = vmd_zero_vector;
@@ -1261,51 +1262,51 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 				// Don't send destroyed subsystems, (another packet handles that), but check to see if the subsystem changed since the last update. 
 			if ((subsystem->current_hits != 0.0f) && (subsystem->current_hits != Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[i])) {
 				flagged = true;
-				//flags[count] |= OO_SUBSYS_HEALTH;
+				flags[count] |= OO_SUBSYS_HEALTH;
 
 				// good thing this cheap because we have to calculate this twice to avoid iterating through the whole system list twice.
 				Oo_info.player_frame_info[pl->player_id].last_sent[objp->net_signature].subsystems[i] = subsystem->current_hits / subsystem->max_hits;;
 
 				// this should be safe because we only work with subsystems that have health.
 				// and also track the list of subsystems that we packed by index
-				total_size_health++;
+				total_size++;
 			}
 
 			// here we're checking to see if the subsystems rotated enough to send.
 			if (abs(subsystem->submodel_info_1.angs.b - subsystem->submodel_info_1.prev_angs.b) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_1b;
-				total_size_anim++;
+				total_size++;
 			}
 			
 			if (abs(subsystem->submodel_info_1.angs.h - subsystem->submodel_info_1.prev_angs.h) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_1h;
-				total_size_anim++;
+				total_size++;
 			}
 
 			if (abs(subsystem->submodel_info_1.angs.p - subsystem->submodel_info_1.prev_angs.p) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_1p;
-				total_size_anim++;
+				total_size++;
 			}
 
 			if (abs(subsystem->submodel_info_2.angs.b - subsystem->submodel_info_2.prev_angs.b) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_2b;
-				total_size_anim++;
+				total_size++;
 			}
 
 			if (abs(subsystem->submodel_info_2.angs.h - subsystem->submodel_info_2.prev_angs.h) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_2h;
-				total_size_anim++;
+				total_size++;
 			}
 
 			if (abs(subsystem->submodel_info_2.angs.p - subsystem->submodel_info_2.prev_angs.p) > OO_SBUSYS_ROTATION_CUTOFF) {
 				flagged = true;
 				flags[count] |= OO_SUBSYS_ROTATION_2p;
-				total_size_anim++;
+				total_size++;
 			}
 
 			if (flagged) {
@@ -1321,7 +1322,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 			i++;
 		}
 
-		mprintf(("At the end of the subsystem section, we are sending.... %d packets with size %d\n", count, total_size_anim));
+		mprintf(("At the end of the subsystem section, we are sending.... %d packets with size %d\n", count, total_size));
 		// Only send info if the count is greater than zero and if we're *not* on the very first frame when everything is already synced, anyway.
 		if (count > 0 && Oo_info.number_of_frames != 0){
 
@@ -1329,7 +1330,7 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 			oo_flags |= OO_SUBSYSTEMS_NEW;
 
 			// pack the count of subsystems first.
-			PACK_SHORT(total_size_health);
+			PACK_SHORT(total_size);
 			count = 0;
 			float temp = 0.0f;
 
