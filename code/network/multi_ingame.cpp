@@ -1017,10 +1017,10 @@ void process_ingame_ships_packet( ubyte *data, header *hinfo )
 		}
 
 		// lookup ship in the original ships array
-		p_objp = mission_parse_get_parse_object(net_signature);
+		p_objp = mission_parse_get_parse_object(ship_name);
 		if(p_objp == NULL){
 			// if this ship is part of wing not on its current wave, look for its "original" by subtracting out wave #
-			p_objp = mission_parse_get_arrival_ship((ushort)(net_signature - (ushort)net_sig_modify));
+			p_objp = mission_parse_get_arrival_ship(ship_name);
 		}
 		if(p_objp == NULL){
 			Int3();
