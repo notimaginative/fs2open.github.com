@@ -246,7 +246,7 @@ static void find_capture_device(OpenALInformation* info)
 	for (size_t idx = 0; idx < CaptureDevices.size(); idx++) {
 		const ALCchar *device_name = CaptureDevices[idx].device_name.c_str();
 
-		ALCdevice *device = alcCaptureOpenDevice(device_name, 22050, AL_FORMAT_MONO8, 22050 * 2);
+		ALCdevice *device = alcCaptureOpenDevice(device_name, 11025, AL_FORMAT_MONO8, 11025 * 2);
 
 		if (device == NULL) {
 			continue;

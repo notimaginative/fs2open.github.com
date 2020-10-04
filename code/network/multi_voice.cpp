@@ -1068,7 +1068,7 @@ void multi_voice_player_send_stream()
 	ubyte data[MAX_PACKET_SIZE],code,*rbuf,msg_mode,chunk_index;
 	ushort chunk_size,uc_size;
 	int packet_size = 0;
-	int sound_size,size_sent,target_index,max_chunk_size;
+	int sound_size,size_sent,uncompressed_size,target_index,max_chunk_size;
 	float gain;
 	double d_gain;
 
@@ -1076,7 +1076,7 @@ void multi_voice_player_send_stream()
 	Assert(Multi_voice_can_record);
 
 	// get the data	
-	rtvoice_get_data((unsigned char**)&Multi_voice_record_buffer, &sound_size, &d_gain);
+	rtvoice_get_data((unsigned char**)&Multi_voice_record_buffer, &sound_size, &uncompressed_size, &d_gain);
 	gain = (float)d_gain;
 
 	msg_mode = (ubyte)Multi_voice_send_mode;
@@ -1124,8 +1124,8 @@ void multi_voice_player_send_stream()
 		// add the current stream id#
 		ADD_DATA(Multi_voice_stream_id);
 
-		Assert(sound_size < MULTI_VOICE_MAX_BUFFER_SIZE);
-		uc_size = (ushort)sound_size;
+		Assert(uncompressed_size < MULTI_VOICE_MAX_BUFFER_SIZE);
+		uc_size = (ushort)uncompressed_size;
 		ADD_USHORT(uc_size);
 
 		// add the chunk index
@@ -1476,7 +1476,7 @@ int multi_voice_max_chunk_size(int msg_mode)
 // process the "next" chunk of standalone valid sound data from the rtvoice system
 void multi_voice_process_next_chunk()
 {			
-	int sound_size;
+	int sound_size, uncompressed_size;
 	double d_gain;
 	voice_stream *str;
 
@@ -1484,7 +1484,7 @@ void multi_voice_process_next_chunk()
 	Assert(Multi_voice_can_record);
 
 	// get the data	
-	rtvoice_get_data((unsigned char**)&Multi_voice_record_buffer, &sound_size, &d_gain);		
+	rtvoice_get_data((unsigned char**)&Multi_voice_record_buffer, &sound_size, &uncompressed_size, &d_gain);
 
 	// if we've reached the max # of packets for this stream, bail
 	if(Multi_voice_current_stream_index >= (MULTI_VOICE_ACCUM_BUFFER_COUNT - 1)){
@@ -1520,7 +1520,7 @@ void multi_voice_process_next_chunk()
 	memcpy(str->accum_buffer[Multi_voice_current_stream_index],Multi_voice_record_buffer,sound_size);
 	str->stream_from = Net_player->player_id;	
 	str->accum_buffer_flags[Multi_voice_current_stream_index] = 1;
-	str->accum_buffer_usize[Multi_voice_current_stream_index] = (ushort)sound_size;
+	str->accum_buffer_usize[Multi_voice_current_stream_index] = (ushort)uncompressed_size;
 	str->accum_buffer_csize[Multi_voice_current_stream_index] = (ushort)sound_size;
 	str->accum_buffer_gain[Multi_voice_current_stream_index] = d_gain;	
 
@@ -1946,7 +1946,7 @@ void multi_voice_alg_play_window(int stream_index)
 		}
 	
 		// now call the rtvoice playback functions		
-		Multi_voice_stream[stream_index].stream_snd_handle = rtvoice_play(Multi_voice_stream[stream_index].stream_rtvoice_handle,(unsigned char*)Multi_voice_playback_buffer,buffer_offset);	
+		Multi_voice_stream[stream_index].stream_snd_handle = rtvoice_play_uncompressed(Multi_voice_stream[stream_index].stream_rtvoice_handle,(unsigned char*)Multi_voice_playback_buffer,buffer_offset);
 		Multi_voice_stream[stream_index].stream_start_time = timer_get_fixed_seconds();
 	}
 	
@@ -2037,8 +2037,8 @@ int Multi_voice_test_packet_tossed = 0;
 // process the next chunk of voice data
 void multi_voice_test_process_next_chunk()
 {
-	unsigned char *outbuf;
-	int size;
+	unsigned char *outbuf, *outbuf_raw;
+	int compressed_size,uncompressed_size,raw_size;
 	double gain;
 	
 	// if the test recording stamp is -1, we should stop
@@ -2059,17 +2059,17 @@ void multi_voice_test_process_next_chunk()
 	}
 
 	// otherwise get the compressed and uncompressed data and do something interesting with it
-	rtvoice_get_data(&outbuf, &size, &gain);	
+	rtvoice_get_data(&outbuf, &compressed_size, &uncompressed_size, &gain, &outbuf_raw, &raw_size);
 
 	// determine whether the packet would have been dropped
-	if (size > multi_voice_max_chunk_size(MULTI_MSG_ALL)) {
+	if (compressed_size > multi_voice_max_chunk_size(MULTI_MSG_ALL)) {
 		Multi_voice_test_packet_tossed = 1;
 	} else {
 		Multi_voice_test_packet_tossed = 0;
 	}
 
 	// send the raw output buffer to the voice options screen
-	options_multi_set_voice_data(outbuf, size, gain);
+	options_multi_set_voice_data(outbuf_raw, raw_size, outbuf, compressed_size, uncompressed_size, gain);
 }
 
 // start recording voice locally for playback testing

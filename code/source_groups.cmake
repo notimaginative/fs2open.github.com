@@ -1432,6 +1432,11 @@ add_file_folder("Utils\\\\boost"
 	utils/boost/syncboundedqueue.h
 )
 
+add_file_folder("VCodec"
+	vcodec/codec1.cpp
+	vcodec/codec1.h
+)
+
 # Weapon files
 add_file_folder("Weapon"
 	weapon/beam.cpp

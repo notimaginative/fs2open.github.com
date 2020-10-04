@@ -523,6 +523,9 @@ net_player *Om_vox_players[MAX_PLAYERS];
 // selected player
 net_player *Om_vox_player_select;
 
+// vox QoS setting
+static int Om_vox_qos_pos;
+
 // mute or don't mute for each player
 int Om_vox_player_flags[MAX_PLAYERS];
 
@@ -1659,6 +1662,10 @@ void options_multi_load_vox_controls()
 																Om_vox_sliders[gr_screen.res][idx].dot_w);
 	}	
 
+	// default position from settings (slider is 0-9, hence the -1)
+	Om_vox_qos_pos = Player->m_server_options.voice_qos - 1;
+	Om_vox_sliders[gr_screen.res][OM_VOX_QOS_SLIDER].slider.pos = Om_vox_qos_pos;
+
 	// create the player list select button
 	Om_vox_plist_button.create(Om_window, "", Om_vox_plist_coords[gr_screen.res][0], Om_vox_plist_coords[gr_screen.res][1], Om_vox_plist_coords[gr_screen.res][2], Om_vox_plist_coords[gr_screen.res][3], 0, 1);
 	Om_vox_plist_button.hide();
@@ -1775,6 +1782,9 @@ void options_multi_vox_accept()
 		Player->m_local_options.flags |= MLO_FLAG_NO_VOICE;
 	}
 
+	// VOX QoS
+	Players->m_server_options.voice_qos = (ubyte)(Om_vox_qos_pos + 1);
+
 	// build the voice preferences stuff
 	voice_pref_flags = 0xffffffff;
 	for(idx=0;idx<Om_vox_num_players;idx++){
@@ -1793,6 +1803,12 @@ void options_multi_vox_do()
 	
 	// check for button presses
 	options_multi_vox_check_buttons();
+
+	// maybe do something with the QoS slider
+	if (Om_vox_qos_pos != Om_vox_sliders[gr_screen.res][OM_VOX_QOS_SLIDER].slider.pos) {
+		Om_vox_qos_pos = Om_vox_sliders[gr_screen.res][OM_VOX_QOS_SLIDER].slider.pos;
+		gamesnd_play_iface(InterfaceSounds::USER_SELECT);
+	}
 
 	// draw the proper accept voice button
 	if(Om_vox_accept_voice){
@@ -1828,7 +1844,7 @@ void options_multi_vox_do()
 				// attempt to get a playback handle
 				handle = multi_voice_test_get_playback_buffer();
 				if(handle != -1){
-					Om_vox_playback_handle = rtvoice_play(handle, Om_vox_comp_buffer, Om_vox_voice_comp_size);
+					Om_vox_playback_handle = rtvoice_play_uncompressed(handle, Om_vox_comp_buffer, Om_vox_voice_comp_size);
 
 					// mark us as playing back
 					Om_vox_test_status = OM_VOX_TEST_PLAYBACK;
@@ -1940,7 +1956,7 @@ void options_multi_vox_button_pressed(int n)
 			// if we're not already doing a record test
 			if(Om_vox_test_status == OM_VOX_TEST_NONE){
 				// set the quality of sound
-				rtvoice_set_qos(Om_vox_sliders[gr_screen.res][OM_VOX_QOS_SLIDER].slider.pos + 1);
+				rtvoice_set_qos(Om_vox_qos_pos + 1);
 
 				// clear the comp buffer
 				memset(Om_vox_comp_buffer,128,OM_VOX_COMP_SIZE);
@@ -2334,24 +2350,27 @@ void options_multi_unselect()
 }
 
 // set voice sound buffer for display 
-void options_multi_set_voice_data(unsigned char *sound_buf, int buf_size, double  /*gain*/)
+void options_multi_set_voice_data(unsigned char *sound_buf, int buf_size, unsigned char *comp_buf, int comp_size, int uncomp_size, double gain)
 {
-	if ( (sound_buf == NULL) || (buf_size <= 0) ) {
-		return;
-	}
-
 	// copy the buffer to the vox tab data
-	Om_vox_voice_buffer_size = MIN(buf_size, OM_VOX_BUF_SIZE);
-	memcpy(Om_vox_voice_buffer, sound_buf, Om_vox_voice_buffer_size);
+	if(buf_size > OM_VOX_BUF_SIZE){
+		memcpy(Om_vox_voice_buffer,sound_buf,OM_VOX_BUF_SIZE);
+		Om_vox_voice_buffer_size = OM_VOX_BUF_SIZE;
+	} else {
+		memcpy(Om_vox_voice_buffer,sound_buf,buf_size);
+		Om_vox_voice_buffer_size = buf_size;
+	}
 
 	// copy and uncompress the compressed buffer
 	if(Om_vox_voice_comp_size == -1){
 		Om_vox_voice_comp_size = 0;
 	}
+	// if we can fit it, decompress this data
+	if((Om_vox_voice_comp_size + uncomp_size) < OM_VOX_COMP_SIZE){
+		// uncompress the data
+		rtvoice_uncompress(comp_buf, comp_size, gain, Om_vox_comp_buffer + Om_vox_voice_comp_size, uncomp_size);
 
-	if ( (Om_vox_voice_comp_size + buf_size) < OM_VOX_COMP_SIZE ) {
-		memcpy(Om_vox_comp_buffer + Om_vox_voice_comp_size, sound_buf, buf_size);
-		Om_vox_voice_comp_size += buf_size;
+		Om_vox_voice_comp_size += uncomp_size;
 	}
 }
 
