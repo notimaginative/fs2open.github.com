@@ -124,7 +124,7 @@ int SELECT(int nfds, fd_set *readfds, fd_set *writefds, fd_set*exceptfds, struct
 int SENDTO(SOCKET s, char * buf, int len, int flags, sockaddr * to, int tolen, int psnet_type);
 
 // call this once per frame to read everything off of our socket
-void PSNET_TOP_LAYER_PROCESS();
+void PSNET_TOP_LAYER_PROCESS(bool idle_select = false);
 
 
 // -------------------------------------------------------------------------------------------------------

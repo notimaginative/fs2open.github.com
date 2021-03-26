@@ -1121,7 +1121,7 @@ DCF(eye_tog, "Toggles setting of the local player eyepoint on every frame (Multi
 
 void multi_do_frame()
 {	
-	PSNET_TOP_LAYER_PROCESS();
+	PSNET_TOP_LAYER_PROCESS(true);
 
 	// always set the local player eye position/orientation here so we know its valid throughout all multiplayer
 	// function calls
@@ -1343,7 +1343,7 @@ void multi_do_frame()
 
 void multi_pause_do_frame()
 {
-	PSNET_TOP_LAYER_PROCESS();
+	PSNET_TOP_LAYER_PROCESS(true);
 
 	// always set the local player eye position/orientation here so we know its valid throughout all multiplayer
 	// function calls

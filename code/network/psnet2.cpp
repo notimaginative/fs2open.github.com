@@ -326,7 +326,7 @@ int SENDTO(SOCKET s, char * buf, int len, int flags, SOCKADDR *to, int tolen, in
 /**
  * Call this once per frame to read everything off of our socket
  */
-void PSNET_TOP_LAYER_PROCESS()
+void PSNET_TOP_LAYER_PROCESS(bool idle_select)
 {
 	// read socket stuff
 	fd_set rfds;
@@ -343,46 +343,49 @@ void PSNET_TOP_LAYER_PROCESS()
 	// clear the addresses to remove compiler warnings
 	memset(&from_addr, 0, sizeof(from_addr));
 
-	while (true) {
-		// check if there is any data on the socket to be read.  The amount of data that can be 
-		// atomically read is stored in len.
+	// check if there is any data on the socket to be read.  The amount of data that can be 
+	// atomically read is stored in len.
 
-		FD_ZERO(&rfds);
-		FD_SET(Psnet_socket, &rfds);
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 0;
+	FD_ZERO(&rfds);
+	FD_SET(Psnet_socket, &rfds);
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
 
-		if ( select(static_cast<int>(Psnet_socket + 1), &rfds, nullptr, nullptr, &timeout) == SOCKET_ERROR ) {
-			ml_printf("Error %d doing a socket select on read", WSAGetLastError());
-			break;
+	extern int Is_standalone;
+	if (Is_standalone && idle_select) {
+		timeout.tv_sec = 1;
+	}
+
+	if ( select(static_cast<int>(Psnet_socket + 1), &rfds, nullptr, nullptr, &timeout) == SOCKET_ERROR ) {
+		ml_printf("Error %d doing a socket select on read", WSAGetLastError());
+		return;
+	}
+
+	// if the read file descriptor is not set, then bail!
+	if ( !FD_ISSET(Psnet_socket, &rfds) ) {
+		return;
+	}
+
+	// get data off the socket and process
+	from_len = sizeof(from_addr);
+	read_len = recvfrom(Psnet_socket, reinterpret_cast<char *>(packet_data), sizeof(packet_data),
+						0, reinterpret_cast<LPSOCKADDR>(&from_addr), &from_len);
+
+	if (read_len <= 0) {
+		if (read_len == -1) {
+			ml_string("Socket error on socket_get_data()");
 		}
 
-		// if the read file descriptor is not set, then bail!
-		if ( !FD_ISSET(Psnet_socket, &rfds) ) {
-			return;
-		}
+		return;
+	}
 
-		// get data off the socket and process
-		from_len = sizeof(from_addr);
-		read_len = recvfrom(Psnet_socket, reinterpret_cast<char *>(packet_data), sizeof(packet_data),
-							0, reinterpret_cast<LPSOCKADDR>(&from_addr), &from_len);
+	// determine the packet type
+	int packet_type = packet_data[0];
+	Assertion(( (packet_type >= 0) && (packet_type < PSNET_NUM_TYPES) ), "Invalid packet_type found. Packet type %d does not exist", packet_type);
 
-		if (read_len <= 0) {
-			if (read_len == -1) {
-				ml_string("Socket error on socket_get_data()");
-			}
-
-			break;
-		}
-
-		// determine the packet type
-		int packet_type = packet_data[0];
-		Assertion(( (packet_type >= 0) && (packet_type < PSNET_NUM_TYPES) ), "Invalid packet_type found. Packet type %d does not exist", packet_type);
-
-		if ( (packet_type >= 0) && (packet_type < PSNET_NUM_TYPES) ) {
-			// buffer the packet
-			psnet_buffer_packet(&Psnet_top_buffers[packet_type], packet_data + 1, read_len - 1, &from_addr);
-		}
+	if ( (packet_type >= 0) && (packet_type < PSNET_NUM_TYPES) ) {
+		// buffer the packet
+		psnet_buffer_packet(&Psnet_top_buffers[packet_type], packet_data + 1, read_len - 1, &from_addr);
 	}
 }
 

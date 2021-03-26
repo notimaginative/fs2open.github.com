@@ -1834,6 +1834,10 @@ void game_init()
 
 	multi_init();	
 
+	if (Is_standalone) {
+		Framerate_cap = Multi_options_g.std_framecap;
+	}
+
 	// start up the mission logfile
 	logfile_init(LOGFILE_EVENT_LOG);
 	log_string(LOGFILE_EVENT_LOG,"FS2_Open Mission Log - Opened \n\n", 1);
@@ -4207,7 +4211,7 @@ void game_set_frametime(int state)
 	Assertion( Framerate_cap > 0, "Framerate cap %d is too low. Needs to be a positive, non-zero number", Framerate_cap );
 
 	// Cap the framerate so it doesn't get too high.
-	if (!Cmdline_NoFPSCap)
+	if ( !Cmdline_NoFPSCap && !(Game_mode & GM_STANDALONE_SERVER) )
 	{
 		fix cap;
 
@@ -4219,17 +4223,6 @@ void game_set_frametime(int state)
 			thistime = timer_get_fixed_seconds();
 		}
 	}
-
-	if((Game_mode & GM_STANDALONE_SERVER) && 
-		(f2fl(Frametime) < ((float)1.0/(float)Multi_options_g.std_framecap))){
-
-		frame_cap_diff = ((float)1.0/(float)Multi_options_g.std_framecap) - f2fl(Frametime);		
-		os_sleep(static_cast<int>(frame_cap_diff*1000)); 				
-		
-		thistime += fl2f((frame_cap_diff));		
-
-		Frametime = thistime - Last_time;
-   }
 
 	// If framerate is too low, cap it.
 	if (Frametime > MAX_FRAMETIME)	{
