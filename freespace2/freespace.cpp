@@ -509,7 +509,7 @@ static int Game_title_bitmap = -1;
 static int Game_title_logo = -1;
 
 // How much RAM is on this machine. Set in WinMain
-uint64_t FreeSpace_total_ram = 0;
+static int FreeSpace_total_ram = 0;
 
 // game flash stuff
 float Game_flash_red = 0.0f;
@@ -1792,11 +1792,7 @@ void game_init()
 	}
 
 	// If less than 48MB of RAM, use low memory model.
-	if (
-#ifdef _WIN32
-		(FreeSpace_total_ram < 48*1024*1024) ||
-#endif
-		Use_low_mem )	{
+	if ( (FreeSpace_total_ram < 48) || Use_low_mem )	{
 		mprintf(( "Using normal memory settings...\n" ));
 		bm_set_low_mem(1);		// Use every other frame of bitmaps
 	} else {
@@ -6328,28 +6324,25 @@ void game_do_state(int state)
 }
 
 
-#ifdef _WIN32
 // return 0 if there is enough RAM to run FreeSpace, otherwise return -1
-int game_do_ram_check(uint64_t ram_in_bytes)
+int game_do_ram_check(int ram_in_mbytes)
 {
-	if ( ram_in_bytes < 30*1024*1024 )	{
+	if ( ram_in_mbytes < 30 )	{
 		int allowed_to_run = 1;
-		if ( ram_in_bytes < 25*1024*1024 ) {
+		if ( ram_in_mbytes < 25 ) {
 			allowed_to_run = 0;
 		}
 
 		char tmp[1024];
-		uint FreeSpace_total_ram_MB;
-		FreeSpace_total_ram_MB = (uint)(ram_in_bytes/(1024*1024));
 
 		if ( allowed_to_run ) {
 
-			sprintf( tmp, XSTR( "FreeSpace has detected that you only have %dMB of free memory.\n\nFreeSpace requires at least 32MB of memory to run.  If you think you have more than %dMB of physical memory, ensure that you aren't running SmartDrive (SMARTDRV.EXE).  Any memory allocated to SmartDrive is not usable by applications\n\nPress 'OK' to continue running with less than the minimum required memory\n", 193), FreeSpace_total_ram_MB, FreeSpace_total_ram_MB);
+			sprintf( tmp, XSTR( "FreeSpace has detected that you only have %dMB of free memory.\n\nFreeSpace requires at least 32MB of memory to run.  If you think you have more than %dMB of physical memory, ensure that you aren't running SmartDrive (SMARTDRV.EXE).  Any memory allocated to SmartDrive is not usable by applications\n\nPress 'OK' to continue running with less than the minimum required memory\n", 193), ram_in_mbytes, ram_in_mbytes);
 
 			os::dialogs::Message( os::dialogs::MESSAGEBOX_ERROR, tmp, XSTR( "Not Enough RAM", 194));
 
 		} else {
-			sprintf( tmp, XSTR( "FreeSpace has detected that you only have %dMB of free memory.\n\nFreeSpace requires at least 32MB of memory to run.  If you think you have more than %dMB of physical memory, ensure that you aren't running SmartDrive (SMARTDRV.EXE).  Any memory allocated to SmartDrive is not usable by applications\n", 195), FreeSpace_total_ram_MB, FreeSpace_total_ram_MB);
+			sprintf( tmp, XSTR( "FreeSpace has detected that you only have %dMB of free memory.\n\nFreeSpace requires at least 32MB of memory to run.  If you think you have more than %dMB of physical memory, ensure that you aren't running SmartDrive (SMARTDRV.EXE).  Any memory allocated to SmartDrive is not usable by applications\n", 195), ram_in_mbytes, ram_in_mbytes);
 			os::dialogs::Message( os::dialogs::MESSAGEBOX_ERROR, tmp, XSTR( "Not Enough RAM", 194) );
 			return -1;
 		}
@@ -6358,7 +6351,6 @@ int game_do_ram_check(uint64_t ram_in_bytes)
 	return 0;
 }
 
-#endif // ifdef WIN32
 
 void game_spew_pof_info_sub(int model_num, polymodel *pm, int sm, CFILE *out, int *out_total, int *out_destroyed_total)
 {
@@ -6484,21 +6476,23 @@ int game_main(int argc, char *argv[])
 {
 	int state;
 
-#ifdef _WIN32
 	// Find out how much RAM is on this machine
-	MEMORYSTATUSEX ms;
-	ms.dwLength = sizeof(ms);
-	GlobalMemoryStatusEx(&ms);
-	FreeSpace_total_ram = ms.ullTotalPhys;
+	FreeSpace_total_ram = SDL_GetSystemRAM();
 
 	if ( game_do_ram_check(FreeSpace_total_ram) == -1 ) {
 		return 1;
 	}
 
+#ifdef _WIN32
+	MEMORYSTATUSEX ms;
+	ms.dwLength = sizeof(ms);
+	GlobalMemoryStatusEx(&ms);
+
 	if ( ms.ullTotalVirtual < 1024 ) {
 		os::dialogs::Message( os::dialogs::MESSAGEBOX_ERROR, XSTR( "FreeSpace requires virtual memory to run.\r\n", 196), XSTR( "No Virtual Memory", 197) );
 		return 1;
 	}
+#endif
 		
 	char *tmp_mem = (char *) vm_malloc(16 * 1024 * 1024);
 	if (!tmp_mem) {
@@ -6508,7 +6502,6 @@ int game_main(int argc, char *argv[])
 
 	vm_free(tmp_mem);
 	tmp_mem = nullptr;
-#endif // _WIN32
 
 
 	if ( !parse_cmdline(argc, argv) ) {
