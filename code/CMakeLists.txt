@@ -55,6 +55,8 @@ target_link_libraries(code PUBLIC parsers)
 
 target_link_libraries(code PUBLIC mdns)
 
+target_link_libraries(code PUBLIC nlohmann-json)
+
 enable_clang_tidy(code)
 
 IF (FSO_USE_SPEECH)

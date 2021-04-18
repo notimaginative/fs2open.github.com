@@ -52,3 +52,5 @@ add_subdirectory(mdns)
 add_subdirectory(variant)
 
 ADD_SUBDIRECTORY(lz4)
+
+ADD_SUBDIRECTORY(nlohmann-json)
