@@ -26,7 +26,7 @@ typedef struct rtv_format
 
 
 #define MAX_RTV_FORMATS	5
-static rtv_format Rtv_formats[MAX_RTV_FORMATS] = 
+static const rtv_format Rtv_formats[MAX_RTV_FORMATS] = 
 {
 	{1,	8,		11025},
 	{1,	16,	11025},
@@ -35,7 +35,7 @@ static rtv_format Rtv_formats[MAX_RTV_FORMATS] =
 	{1,	8,		44100},
 };
 
-static int Rtv_do_compression=0;					// flag to indicate whether compression should be done
+static const int Rtv_do_compression = 1;			// flag to indicate whether compression should be done
 static int Rtv_recording_format;					// recording format, index into Rtv_formats[]
 static int Rtv_playback_format;					// playback format, index into Rtv_formats[]
 
@@ -145,7 +145,8 @@ int rtvoice_init_recording(int  qos)
 			return -1;
 		}
 
-		Rtv_capture_raw_buffer_size = 44100*RTV_BUFFER_TIME*2;//static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
+		Rtv_capture_raw_buffer_size = static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
+		// Rtv_capture_raw_buffer_size = 44100*RTV_BUFFER_TIME*2;//static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
 
 		if ( Encode_buffer1 ) {
 			vm_free(Encode_buffer1);
@@ -432,8 +433,13 @@ size_t rtvoice_get_decode_buffer_size()
 // uncompress the data into PCM format
 void rtvoice_uncompress(unsigned char *data_in, int size_in, double gain, unsigned char *data_out, int size_out)
 {
-	Rtv_code_info.Gain = gain;
-	Decode(&Rtv_code_info, data_in, data_out, size_in, size_out);
+	if (Rtv_do_compression) {
+		Rtv_code_info.Gain = gain;
+		Decode(&Rtv_code_info, data_in, data_out, size_in, size_out);
+	} else {
+		memcpy(data_out, data_in, std::min(size_in, size_out));
+	}
+
 }
 
 // Close down the real-time voice playback system
@@ -468,7 +474,7 @@ void rtvoice_reset_out_buffers()
 //			!0	=>	failure, playback not possible
 int rtvoice_init_playback()
 {
-	rtv_format	*rtvf=nullptr;
+	const rtv_format	*rtvf;
 
 	if ( !Rtv_playback_inited ) {
 
@@ -526,7 +532,7 @@ int rtvoice_find_free_output_buffer()
 int rtvoice_create_playback_buffer()
 {
 	int			index;
-	rtv_format	*rtvf=nullptr;
+	const rtv_format	*rtvf;
 
 	rtvf = &Rtv_formats[Rtv_playback_format];
 	index = rtvoice_find_free_output_buffer();
