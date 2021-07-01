@@ -193,7 +193,7 @@ int dscap_max_buffersize()
 
 	ALCsizei num_samples = 0;
 
-	OpenAL_C_ErrorCheck( alcGetIntegerv(ds_capture_device, ALC_CAPTURE_SAMPLES, sizeof(ALCsizei), &num_samples), return -1 );
+	OpenAL_C_ErrorCheck( alcGetIntegerv(ds_capture_device, ALC_CAPTURE_SAMPLES, 1, &num_samples), return -1 );
 
 	return (num_samples * ALCaptureInfo.block_align);
 }
@@ -214,15 +214,15 @@ int dscap_get_raw_data(unsigned char *outbuf, unsigned int max_size)
 		return 0;
 	}
 
-	ALCsizei num_samples = 0;
+	ALCint num_samples = 0;
 
-	OpenAL_C_ErrorPrint( alcGetIntegerv(ds_capture_device, ALC_CAPTURE_SAMPLES, sizeof(ALCsizei), &num_samples) );
+	OpenAL_C_ErrorPrint( alcGetIntegerv(ds_capture_device, ALC_CAPTURE_SAMPLES, 1, &num_samples) );
 
 	if (num_samples <= 0) {
 		return 0;
 	}
 
-	ALCsizei max_buf_size = MIN(num_samples, ALsizei(max_size / ALCaptureInfo.block_align));
+	ALCint max_buf_size = MIN(num_samples, ALCint(max_size / ALCaptureInfo.block_align));
 
 	OpenAL_C_ErrorCheck( alcCaptureSamples(ds_capture_device, outbuf, max_buf_size), return 0 );
 

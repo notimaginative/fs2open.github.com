@@ -64,8 +64,8 @@ static unsigned int Rtv_callback_time;			// callback time in ms
 static void (*Rtv_callback)();
 
 // recording/encoding buffers
-static unsigned char *Rtv_capture_raw_buffer;
-static unsigned char *Rtv_capture_compressed_buffer;
+static unsigned char *Rtv_capture_raw_buffer = nullptr;
+static unsigned char *Rtv_capture_compressed_buffer = nullptr;
 static size_t Rtv_capture_compressed_buffer_size;
 static size_t Rtv_capture_raw_buffer_size;
 
@@ -73,7 +73,7 @@ static unsigned char	*Encode_buffer1 = nullptr;
 static unsigned char	*Encode_buffer2 = nullptr;
 
 // playback/decoding buffers
-static unsigned char *Rtv_playback_uncompressed_buffer;
+static unsigned char *Rtv_playback_uncompressed_buffer = nullptr;
 static size_t Rtv_playback_uncompressed_buffer_size;
 
 static unsigned char *Decode_buffer = nullptr;
@@ -113,7 +113,7 @@ int rtvoice_pick_record_format()
 {
 	int i;
 
-	for (i=1; i<MAX_RTV_FORMATS; i++) {
+	for (i=0; i<MAX_RTV_FORMATS; i++) {
 		if ( dscap_create_buffer(Rtv_formats[i].frequency, Rtv_formats[i].bits_per_sample, 1, RTV_BUFFER_TIME) == 0 ) {
 			dscap_release_buffer();
 			Rtv_recording_format=i;
@@ -379,18 +379,17 @@ int rtvoice_maybe_convert_data(unsigned char *data, int size)
 // NOTE: function converts voice data into compressed format
 void rtvoice_get_data(unsigned char **outbuf, int *compressed_size, int *uncompressed_size, double *gain, unsigned char **outbuf_raw, int *outbuf_size_raw)
 {
-	int max_size, raw_size, csize;
-	max_size = dscap_max_buffersize();
+	int raw_size, csize;
 
 	*compressed_size=0;
 	*uncompressed_size=0;
 	*outbuf=nullptr;
 
-	if ( max_size < 0 ) {
+	if ( dscap_max_buffersize() <= 0 ) {
 		return;
 	}
 
-	raw_size = dscap_get_raw_data(Rtv_capture_raw_buffer, static_cast<unsigned int>(max_size));
+	raw_size = dscap_get_raw_data(Rtv_capture_raw_buffer, Rtv_capture_raw_buffer_size);
 
 	// convert data to 8bit, 11KHz if necessary
 	raw_size = rtvoice_maybe_convert_data(Rtv_capture_raw_buffer, raw_size);

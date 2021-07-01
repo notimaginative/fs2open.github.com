@@ -246,7 +246,7 @@ static void find_capture_device(OpenALInformation* info)
 	for (size_t idx = 0; idx < CaptureDevices.size(); idx++) {
 		const ALCchar *device_name = CaptureDevices[idx].device_name.c_str();
 
-		ALCdevice *device = alcCaptureOpenDevice(device_name, 11025, AL_FORMAT_MONO8, 11025 * 2);
+		ALCdevice *device = alcCaptureOpenDevice(device_name, 22050, AL_FORMAT_MONO8, 22050 * 2);
 
 		if (device == NULL) {
 			continue;
@@ -384,8 +384,8 @@ static void get_version_info(OpenALInformation* info) {
 	// version check (for 1.0 or 1.1)
 	ALCint AL_minor_version = 0;
 	ALCint AL_major_version = 0;
-	alcGetIntegerv(NULL, ALC_MAJOR_VERSION, sizeof(ALCint), &AL_major_version);
-	alcGetIntegerv(NULL, ALC_MINOR_VERSION, sizeof(ALCint), &AL_minor_version);
+	alcGetIntegerv(NULL, ALC_MAJOR_VERSION, 1, &AL_major_version);
+	alcGetIntegerv(NULL, ALC_MINOR_VERSION, 1, &AL_minor_version);
 
 	info->version_major = static_cast<uint32_t>(AL_major_version);
 	info->version_minor = static_cast<uint32_t>(AL_minor_version);
