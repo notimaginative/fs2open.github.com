@@ -25,14 +25,13 @@ typedef struct rtv_format
 } rtv_format;
 
 
-#define MAX_RTV_FORMATS	5
+#define MAX_RTV_FORMATS	4
 static const rtv_format Rtv_formats[MAX_RTV_FORMATS] = 
 {
 	{1,	8,		11025},
 	{1,	16,	11025},
 	{1,	8,		22050},
-	{1,	16,	22050},
-	{1,	8,		44100},
+	{1,	16,	22050}
 };
 
 static const int Rtv_do_compression = 1;			// flag to indicate whether compression should be done
@@ -120,7 +119,7 @@ int rtvoice_pick_record_format()
 			break;
 		}
 	}
-printf("Rtv_recording_format: %d\n", Rtv_recording_format);
+
 	if ( i == MAX_RTV_FORMATS ) {
 		return -1;
 	}
@@ -140,52 +139,57 @@ void rtvoice_set_qos(int qos)
 //			!0	=>	failure, recording not possible
 int rtvoice_init_recording(int  qos)
 {
-	if ( !Rtv_recording_inited ) {
-		if ( rtvoice_pick_record_format() ) {
-			return -1;
-		}
-
-		Rtv_capture_raw_buffer_size = static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
-		// Rtv_capture_raw_buffer_size = 44100*RTV_BUFFER_TIME*2;//static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
-
-		if ( Encode_buffer1 ) {
-			vm_free(Encode_buffer1);
-			Encode_buffer1=nullptr;
-		}
-
-		if ( dscap_create_buffer(Rtv_formats[Rtv_recording_format].frequency, Rtv_formats[Rtv_recording_format].bits_per_sample, 1, RTV_BUFFER_TIME) ) {
-			return -1;
-		}
-
-		Encode_buffer1 = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
-		Assert(Encode_buffer1);
-
-		if ( Encode_buffer2 ) {
-			vm_free(Encode_buffer2);
-			Encode_buffer2=nullptr;
-		}
-		Encode_buffer2 = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
-		Assert(Encode_buffer2);
-
-		// malloc out the voice data buffer for raw (uncompressed) recorded sound
-		if ( Rtv_capture_raw_buffer ) {
-			vm_free(Rtv_capture_raw_buffer);
-			Rtv_capture_raw_buffer=nullptr;
-		}
-		Rtv_capture_raw_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
-
-		// malloc out voice data buffer for compressed recorded sound
-		if ( Rtv_capture_compressed_buffer ) {
-			vm_free(Rtv_capture_compressed_buffer);
-			Rtv_capture_compressed_buffer=nullptr;
-		}
-		Rtv_capture_compressed_buffer_size=Rtv_capture_raw_buffer_size;	// be safe and allocate same as uncompressed
-		Rtv_capture_compressed_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_compressed_buffer_size));
-
-		InitEncoder(e_cCodec1, qos, Encode_buffer1, Encode_buffer2);
-
-		Rtv_recording_inited=1;
+	if (Rtv_recording_inited) {
+		return 0;
 	}
+
+	if ( rtvoice_pick_record_format() ) {
+		return -1;
+	}
+
+	Rtv_capture_raw_buffer_size = static_cast<size_t>(Rtv_formats[Rtv_recording_format].frequency * (RTV_BUFFER_TIME) * fl2i(Rtv_formats[Rtv_recording_format].bits_per_sample/8.0f));
+
+	if ( dscap_create_buffer(Rtv_formats[Rtv_recording_format].frequency, Rtv_formats[Rtv_recording_format].bits_per_sample, 1, RTV_BUFFER_TIME) ) {
+		return -1;
+	}
+
+	if ( Encode_buffer1 ) {
+		vm_free(Encode_buffer1);
+		Encode_buffer1=nullptr;
+	}
+
+	Encode_buffer1 = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
+	Assert(Encode_buffer1);
+
+	if ( Encode_buffer2 ) {
+		vm_free(Encode_buffer2);
+		Encode_buffer2=nullptr;
+	}
+
+	Encode_buffer2 = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
+	Assert(Encode_buffer2);
+
+	InitEncoder(e_cCodec1, qos, Encode_buffer1, Encode_buffer2);
+
+	// malloc out the voice data buffer for raw (uncompressed) recorded sound
+	if ( Rtv_capture_raw_buffer ) {
+		vm_free(Rtv_capture_raw_buffer);
+		Rtv_capture_raw_buffer=nullptr;
+	}
+
+	Rtv_capture_raw_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_raw_buffer_size));
+
+	// malloc out voice data buffer for compressed recorded sound
+	if ( Rtv_capture_compressed_buffer ) {
+		vm_free(Rtv_capture_compressed_buffer);
+		Rtv_capture_compressed_buffer=nullptr;
+	}
+
+	Rtv_capture_compressed_buffer_size=Rtv_capture_raw_buffer_size;	// be safe and allocate same as uncompressed
+	Rtv_capture_compressed_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_capture_compressed_buffer_size));
+
+	Rtv_recording_inited = 1;
+
 	return 0;
 }
 
@@ -202,6 +206,14 @@ void rtvoice_stop_recording()
 		SDL_RemoveTimer(Rtv_record_timer_id);
 		Rtv_record_timer_id = 0;
 	}
+
+	// clear any leftover capture samples
+	int rc = 0;
+
+	do {
+		rc = dscap_get_raw_data(Rtv_capture_raw_buffer, Rtv_capture_raw_buffer_size);
+	} while (rc > 0);
+
 
 	Rtv_recording=0;
 }
@@ -280,13 +292,13 @@ int rtvoice_compress(unsigned char *data_in, int size_in, unsigned char *data_ou
 {
 	int		compressed_size;
 
-	Rtv_code_info.Code = e_cCodec1;
-	Rtv_code_info.Gain = 0;
-
 	compressed_size = 0;
 	if(size_in <= 0){
 		nprintf(("Network","RTVOICE => 0 bytes size in !\n"));
 	} else {
+		Rtv_code_info.Code = e_cCodec1;
+		Rtv_code_info.Gain = 0;
+
 		compressed_size = Encode(data_in, data_out, size_in, size_out, &Rtv_code_info);
 
 		nprintf(("SOUND","RTVOICE => Sound compressed to %d bytes (%0.2f percent)\n", compressed_size, (compressed_size*100.0f)/size_in));
@@ -475,35 +487,36 @@ int rtvoice_init_playback()
 {
 	const rtv_format	*rtvf;
 
-	if ( !Rtv_playback_inited ) {
-
-		rtvoice_reset_out_buffers();
-
-		Rtv_playback_format=0;
-		rtvf = &Rtv_formats[Rtv_playback_format];
-		Decode_buffer_size = static_cast<size_t>(rtvf->frequency * (RTV_BUFFER_TIME) * static_cast<int>(rtvf->bits_per_sample/8.0f));
-
-		if ( Decode_buffer ) {
-			vm_free(Decode_buffer);
-			Decode_buffer=nullptr;
-		}
-
-		Decode_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Decode_buffer_size));
-		Assert(Decode_buffer);
-
-		if ( Rtv_playback_uncompressed_buffer ) {
-			vm_free(Rtv_playback_uncompressed_buffer);
-			Rtv_playback_uncompressed_buffer=nullptr;
-		}
-
-		Rtv_playback_uncompressed_buffer_size = Decode_buffer_size;
-		Rtv_playback_uncompressed_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_playback_uncompressed_buffer_size));
-		Assert(Rtv_playback_uncompressed_buffer);
-
-		InitDecoder(1, Decode_buffer);
-
-		Rtv_playback_inited=1;
+	if (Rtv_playback_inited) {
+		return 0;
 	}
+
+	rtvoice_reset_out_buffers();
+
+	Rtv_playback_format=0;
+	rtvf = &Rtv_formats[Rtv_playback_format];
+	Decode_buffer_size = static_cast<size_t>(rtvf->frequency * (RTV_BUFFER_TIME) * static_cast<int>(rtvf->bits_per_sample/8.0f));
+
+	if ( Decode_buffer ) {
+		vm_free(Decode_buffer);
+		Decode_buffer=nullptr;
+	}
+
+	Decode_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Decode_buffer_size));
+	Assert(Decode_buffer);
+
+	InitDecoder(1, Decode_buffer);
+
+	if ( Rtv_playback_uncompressed_buffer ) {
+		vm_free(Rtv_playback_uncompressed_buffer);
+		Rtv_playback_uncompressed_buffer=nullptr;
+	}
+
+	Rtv_playback_uncompressed_buffer_size = Decode_buffer_size;
+	Rtv_playback_uncompressed_buffer = reinterpret_cast<unsigned char*>(vm_malloc(Rtv_playback_uncompressed_buffer_size));
+	Assert(Rtv_playback_uncompressed_buffer);
+
+	Rtv_playback_inited = 1;
 
 	return 0;
 }
