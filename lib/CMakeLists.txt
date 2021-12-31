@@ -18,10 +18,6 @@ endif()
 ADD_SUBDIRECTORY(libsdl)
 
 ADD_SUBDIRECTORY(jansson)
-# These are only required for the web-ui which is non-Windows
-IF(UNIX)
-	ADD_SUBDIRECTORY(mongoose)
-ENDIF(UNIX)
 
 add_subdirectory(md5)
 
@@ -54,3 +50,5 @@ add_subdirectory(variant)
 ADD_SUBDIRECTORY(lz4)
 
 ADD_SUBDIRECTORY(nlohmann-json)
+
+ADD_SUBDIRECTORY(libwebsockets)

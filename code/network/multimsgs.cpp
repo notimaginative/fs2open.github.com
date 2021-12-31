@@ -26,7 +26,7 @@
 #include "mission/missiongoals.h"
 #include "mission/missionlog.h"
 #include "mission/missionmessage.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "gamesnd/gamesnd.h"
 #include "ship/shiphit.h"
 #include "render/3d.h"

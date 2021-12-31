@@ -37,7 +37,7 @@
 #include "playerman/player.h"
 #include "mission/missionparse.h"
 #include "missionui/missionshipchoice.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "ship/shipfx.h"
 #include "object/object.h"
 #include "playerman/managepilot.h"

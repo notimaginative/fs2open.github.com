@@ -29,7 +29,7 @@
 #include "network/multi_sexp.h"
 #include "network/multi_team.h"
 #include "network/multimsgs.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "parse/parselo.h"
 #include "parse/sexp.h"
 #include "playerman/player.h"

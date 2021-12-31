@@ -21,7 +21,7 @@
 #include "gamesequence/gamesequence.h"
 #include "freespace.h"
 #include "osapi/osapi.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "network/multi_xfer.h"
 #include "network/multiui.h"
 #include "network/multi_ingame.h"

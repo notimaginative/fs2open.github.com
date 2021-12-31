@@ -50,6 +50,7 @@ typedef struct multi_global_options {
 	char		std_passwd[STD_PASSWD_LEN+1];							// standalone host password
 	char		std_pname[STD_NAME_LEN+1];								// permanent name for the standalone - if any
 	int		std_framecap;												// standalone frame cap
+	SCP_string	std_listen_addr;
 
 	ushort		webapiPort;
 	SCP_string	webapiUsername;

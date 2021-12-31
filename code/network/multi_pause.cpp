@@ -15,7 +15,7 @@
 #include "io/key.h"
 #include "popup/popup.h"
 #include "gamesequence/gamesequence.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "gamesnd/gamesnd.h"
 #include "network/multiutil.h"
 #include "network/multiui.h"

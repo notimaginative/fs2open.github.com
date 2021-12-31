@@ -16,7 +16,7 @@
 #include "network/multimsgs.h"
 #include "network/multi_obj.h"
 #include "freespace.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "network/multiutil.h"
 #include "network/multi_voice.h"
 #include "network/multi_options.h"
@@ -164,6 +164,13 @@ void multi_options_read_config()
 				if ( SETTING("+lan_update") ) {
 					Multi_options_g.std_datarate = OBJ_UPDATE_LAN;
 				} else
+				// set standalone websocket listen address/interface
+				if ( SETTING("+listen_address") ) {
+					NEXT_TOKEN();
+					if (tok != nullptr) {
+						Multi_options_g.std_listen_addr = SCP_string(tok);
+					}
+				} else
 				if ( SETTING("+webui_root") ) {
 					NEXT_TOKEN();
 					if (tok != NULL) {
@@ -288,12 +295,6 @@ void multi_options_read_config()
 
 	// sanitize config options for PXO
 	multi_fs_tracker_verify_options();
-
-#ifndef _WIN32
-	if (Is_standalone) {
-		std_configLoaded(&Multi_options_g);
-	}
-#endif
 }
 
 // set netgame defaults 

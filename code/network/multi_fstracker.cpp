@@ -25,7 +25,7 @@
 #include "network/multiui.h"
 #include "network/multimsgs.h"
 #include "network/multi_log.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "network/multi_pmsg.h"
 #include "playerman/player.h"
 

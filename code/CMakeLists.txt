@@ -68,10 +68,12 @@ TARGET_LINK_LIBRARIES(code PUBLIC jansson)
 
 target_link_libraries(code PUBLIC variant)
 
-# Headers for standalone "gui" on UNIX
 IF(UNIX)
-	TARGET_LINK_LIBRARIES(code PUBLIC ${MONGOOSE_LIBS})
+	# for dlopen() needed by renderdoc
+	target_link_libraries(code PUBLIC dl)
 ENDIF(UNIX)
+
+target_link_libraries(code PUBLIC ${LWS_LDFLAGS})
 
 IF(FSO_BUILD_TOOLS)
 	ADD_SUBDIRECTORY(cfilearchiver)

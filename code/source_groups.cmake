@@ -945,22 +945,11 @@ add_file_folder("Network"
 	network/psnet2.h
 	network/ptrack.cpp
 	network/ptrack.h
-	network/stand_gui.h
+	network/stand_server.cpp
+	network/stand_server.h
 	network/valid.cpp
 	network/valid.h
 )
-
-IF(WIN32)
-add_file_folder("Network"
-	${file_root_network}
-	network/stand_gui.cpp
-)
-ELSE(WIN32)
-add_file_folder("Network"
-	${file_root_network}
-	network/stand_gui-unix.cpp
-)
-ENDIF(WIN32)
 
 # Object files
 add_file_folder("Object"

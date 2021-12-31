@@ -22,7 +22,7 @@
 #include "popup/popup.h"
 #include "network/multi_campaign.h"
 #include "network/multi_endgame.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "mission/missiongoals.h"
 #include "mission/missioncampaign.h"
 #include "mission/missionparse.h"

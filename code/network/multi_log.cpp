@@ -15,6 +15,7 @@
 #include "parse/generic_log.h"
 #include "cfile/cfile.h"
 #include "parse/parselo.h"
+#include "network/stand_server.h"
 
 
 
@@ -155,10 +156,8 @@ void ml_string(const char *string, int add_time)
 	log_string(LOGFILE_MULTI_LOG, tmp, 0);
 
 	// add to standalone UI too
-	extern int Is_standalone;
-	extern void std_debug_multilog_add_line(const char *str);
 	if (Is_standalone) {
-		std_debug_multilog_add_line(tmp);
+		std_multilog_add_line(tmp);
 	}
 
 #if defined(MULTI_LOGFILE_ECHO_TO_DEBUG)

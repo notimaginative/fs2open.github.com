@@ -135,7 +135,7 @@
 #include "network/multiteamselect.h"
 #include "network/multiui.h"
 #include "network/multiutil.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "object/objcollide.h"
 #include "object/objectsnd.h"
 #include "object/waypoint.h"
@@ -1703,9 +1703,6 @@ void game_init()
 		Cmdline_env = 0;
 		Fireball_use_3d_warp = false;
 		Cmdline_normal = 0;
-
-		// now init the standalone server code
-		std_init_standalone();
 	}
 
 	// verify that he has a valid ships.tbl (will Game_ships_tbl_valid if so)
@@ -1971,6 +1968,11 @@ void game_init()
 #endif
 
 	libs::discord::init();
+
+	if (Is_standalone) {
+		// now init the standalone server code
+		std_init_standalone();
+	}
 
 	nprintf(("General", "Ships.tbl is : %s\n", Game_ships_tbl_valid ? "VALID" : "INVALID!!!!"));
 	nprintf(("General", "Weapons.tbl is : %s\n", Game_weapons_tbl_valid ? "VALID" : "INVALID!!!!"));

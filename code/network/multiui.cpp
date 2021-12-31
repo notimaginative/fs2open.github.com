@@ -29,7 +29,7 @@
 #include "playerman/player.h"
 #include "network/multi_xfer.h"
 #include "cmdline/cmdline.h"
-#include "network/stand_gui.h"
+#include "network/stand_server.h"
 #include "network/multiteamselect.h"
 #include "mission/missioncampaign.h"
 #include "mission/missionload.h"
@@ -2291,7 +2291,7 @@ void multi_sg_rank_scroll_up();
 void multi_sg_rank_scroll_down();
 void multi_sg_rank_display_stuff();
 void multi_sg_rank_process_select();
-void multi_sg_rank_build_name(char *in,char *out);
+void multi_sg_rank_build_name(const char *in, char *out, const size_t max_len);
 void multi_sg_check_passwd();
 void multi_sg_check_name();
 void multi_sg_release_passwd();
@@ -2891,7 +2891,7 @@ void multi_sg_rank_display_stuff()
 		}
 
 		// print the text
-		multi_sg_rank_build_name(Ranks[idx].name,rank_name);
+		multi_sg_rank_build_name(Ranks[idx].name, rank_name, SDL_arraysize(rank_name));
 		gr_string(Msg_rank_list_coords[gr_screen.res][MSG_X_COORD],y,rank_name,GR_RESIZE_MENU);
 
 		// increment stuff
@@ -2903,7 +2903,7 @@ void multi_sg_rank_display_stuff()
 	// display the selected rank
 	
 	gr_set_color_fast(&Color_bright);
-	multi_sg_rank_build_name(Ranks[Multi_sg_netgame->rank_base].name,rank_name);
+	multi_sg_rank_build_name(Ranks[Multi_sg_netgame->rank_base].name, rank_name, SDL_arraysize(rank_name));
 	gr_string(Msg_rank_sel_coords[gr_screen.res][MSG_X_COORD],Msg_rank_sel_coords[gr_screen.res][MSG_Y_COORD],rank_name,GR_RESIZE_MENU);
 	
 }
@@ -2943,7 +2943,7 @@ void multi_sg_rank_process_select()
 	}
 }
 
-void multi_sg_rank_build_name(char *in,char *out)
+void multi_sg_rank_build_name(const char *in, char *out, const size_t max_len)
 {
 	char use[100];
 	char *first;
@@ -2953,7 +2953,7 @@ void multi_sg_rank_build_name(char *in,char *out)
 
 	// just copy the string
 	if(first == NULL){
-		strcpy(out,in);
+		strcpy_s(out, max_len, in);
 	}
 	
 	// if the first part of the string is lieutenant, then abbreivate it and tack on the rest of the string	
@@ -2962,15 +2962,15 @@ void multi_sg_rank_build_name(char *in,char *out)
 
 		// if he's not just a plain lieutenant
 		if(first != NULL){
-			strcpy(out,XSTR("Lt. ",786));  // [[ lieutenant ]]
-			strcat(out,first);
+			strcpy_s(out, max_len, XSTR("Lt. ",786));  // [[ lieutenant ]]
+			strcat_s(out, max_len, first);
 		}
 		// if he _is_ just a plain lieutenant
 		else {
-			strcpy(out,in);
+			strcpy_s(out, max_len, in);
 		}
 	} else {
-		strcpy(out,in);
+		strcpy_s(out, max_len, in);
 	}
 }
 
