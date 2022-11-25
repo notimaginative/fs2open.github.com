@@ -16,9 +16,32 @@ IF (WIN32)
 
     add_target_copy_files("${dll_name}")
 ELSE(WIN32)
-    FIND_PACKAGE(OpenAL REQUIRED)
+    if(PLATFORM_MAC)
+        option(OPENAL_USE_PRECOMPILED "Use precompiled version of OpenAL. If disabled the system libraries will be used." ON)
+    endif()
 
-    INCLUDE(util)
+    if(NOT OPENAL_USE_PRECOMPILED)
+        FIND_PACKAGE(OpenAL REQUIRED)
 
-    ADD_IMPORTED_LIB(openal ${OPENAL_INCLUDE_DIR} ${OPENAL_LIBRARY})
+        INCLUDE(util)
+
+        ADD_IMPORTED_LIB(openal ${OPENAL_INCLUDE_DIR} ${OPENAL_LIBRARY})
+    else()
+        message(STATUS "Using pre-built OpenAL libraries.")
+
+        get_prebuilt_path(PREBUILT_PATH)
+        set(OPENAL_PATH "${PREBUILT_PATH}/openal")
+
+        find_library(openal_LOCATION openal
+            PATHS "${OPENAL_PATH}/lib"
+            NO_DEFAULT_PATH)
+
+        file(GLOB openal_LIBS "${OPENAL_PATH}/lib/libopenal*")
+
+        get_filename_component(FULL_LIB_PATH "${openal_LOCATION}" REALPATH)
+
+        add_imported_lib("openal" "${OPENAL_PATH}/include/AL" "${FULL_LIB_PATH}")
+
+        add_target_copy_files("${openal_LIBS}")
+    endif()
 ENDIF(WIN32)
