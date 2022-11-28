@@ -185,9 +185,16 @@ endfunction()
 macro(add_target_copy_files)
 	foreach(file ${ARGN})
 		if (IS_DIRECTORY "${file}")
-			INSTALL(DIRECTORY ${file}
-					DESTINATION ${LIBRAY_DESTINATION}
-					)
+			if ("${file}" MATCHES ".framework")
+				INSTALL(CODE "
+						include(BundleUtilities)
+						copy_resolved_framework_into_bundle(\"${file}\" \"${LIBRARY_DESTINATION}\")
+					")
+			else()
+				INSTALL(DIRECTORY ${file}
+						DESTINATION ${LIBRAY_DESTINATION}
+						)
+			endif()
 		else()
 			INSTALL(FILES ${file}
 					DESTINATION ${LIBRAY_DESTINATION}
