@@ -1,6 +1,8 @@
 
 IF(WIN32)
-	IF(IS_64BIT)
+	if(IS_ARM64)
+		set(ARCH "arm64")
+	ELSEIF(IS_64BIT)
 		# 64-bit
 		set(ARCH "x64")
 	ELSE()
