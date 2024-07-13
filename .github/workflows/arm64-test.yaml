@@ -2,7 +2,6 @@ name: ARM64 test workflow
 
 on:
   workflow_dispatch:
-  push:
 
 jobs:
   build_windows:
@@ -11,8 +10,8 @@ jobs:
         configuration: [FastDebug]
         arch: [Win32, x64, ARM64]
         include:
-          - arch: [Win32, x64]
-            simd: [SSE2]
+          - simd: SSE2
+            arch: [Win32, x64]
     name: Windows
     runs-on: windows-2019
     steps:
