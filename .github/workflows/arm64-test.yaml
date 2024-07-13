@@ -2,6 +2,7 @@ name: ARM64 test workflow
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   build_windows:
