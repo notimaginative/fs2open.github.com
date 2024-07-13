@@ -3,5 +3,5 @@
 	url = https://github.com/asarium/cmake-modules.git
 [submodule "lib/libRocket"]
 	path = lib/libRocket
-	url = https://github.com/asarium/libRocket.git
+	url = https://github.com/scp-fs2open/libRocket.git
 
