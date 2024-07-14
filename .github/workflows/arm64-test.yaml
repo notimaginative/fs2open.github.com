@@ -6,12 +6,13 @@ on:
 jobs:
   build_windows:
     strategy:
+      max-parallel: 1
       matrix:
         configuration: [FastDebug]
-        arch: [Win32, x64, ARM64]
+        arch: [Win32, x64]
         include:
           - arch: Win32
-            simd: SSE2
+            simd: [SSE2, AVX]
           - arch: x64
             simd: SSE2
     name: Windows
@@ -42,15 +43,15 @@ jobs:
             SIMD_OPT="-DMSVC_SIMD_INSTRUCTIONS=${SIMD}"
           fi
 
-          VULKAN="ON"
+          VULKAN_OPT=
           if [ "$ARCHITECTURE" = "Win32" ]; then
-            VULKAN="OFF"
+            VULKAN_OPT="-DFSO_BUILD_WITH_VULKAN=OFF"
           fi
 
           cmake -DCMAKE_INSTALL_PREFIX="$(pwd)/install" -DFSO_USE_SPEECH="ON" \
-            -DFSO_USE_VOICEREC="ON" "$SIMD_OPT" \
+            -DFSO_USE_VOICEREC="ON" $SIMD_OPT \
             -DFSO_BUILD_QTFRED=OFF -DFSO_BUILD_TESTS=ON \
-            -DFSO_INSTALL_DEBUG_FILES="ON" -DFSO_BUILD_WITH_VULKAN="$VULKAN" -A "$ARCHITECTURE" \
+            -DFSO_INSTALL_DEBUG_FILES="ON" $VULKAN_OPT -A "$ARCHITECTURE" \
             -G "Visual Studio 16 2019" -T "v142" ..
       - name: Compile
         working-directory: ./build
