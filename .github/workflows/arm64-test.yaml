@@ -9,17 +9,23 @@ jobs:
       max-parallel: 1
       matrix:
         configuration: [FastDebug, Release]
-        arch: [Win32, x64, ARM64]
-        simd: [SSE2, AVX, ""]
-        exclude:
-          - arch: Win32
-            simd: 
-          - arch: x64
-            simd: 
+        arch: [Win32, x64]
+        simd: [SSE2, AVX]
+        # hoops to deal with ignoring x86 simd on arm64...
+        # allow SSE2 and AVX on x86, ignore no simd
+        # allow no/default on arm64, ignore SSE2/AVX
+        # exclude:
+        #   - arch: Win32
+        #     simd: 
+        #   - arch: x64
+        #     simd: 
+        #   - arch: ARM64
+        #     simd: SSE2
+        #   - arch: ARM64
+        #     simd: AVX
+        include:
           - arch: ARM64
-            simd: SSE2
-          - arch: ARM64
-            simd: AVX
+            simd: 
     name: Windows
     runs-on: windows-2019
     steps:
