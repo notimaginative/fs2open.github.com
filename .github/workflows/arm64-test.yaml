@@ -27,7 +27,8 @@ jobs:
           - arch: ARM64
             simd: 
     name: Windows
-    runs-on: windows-2019
+    # runs-on: windows-2019
+    runs-on: ubuntu-latest
     steps:
       - name: Display matrix config
         run: echo "${{ matrix.configuration }} - ${{ matrix.arch }} - ${{ matrix.simd }}"
