@@ -6,29 +6,21 @@ on:
 jobs:
   build_windows:
     strategy:
-      max-parallel: 1
+      # max-parallel: 1
       matrix:
         configuration: [FastDebug, Release]
         arch: [Win32, x64]
-        simd: [SSE2, AVX]
-        # hoops to deal with ignoring x86 simd on arm64...
-        # allow SSE2 and AVX on x86, ignore no simd
-        # allow no/default on arm64, ignore SSE2/AVX
-        # exclude:
-        #   - arch: Win32
-        #     simd: 
-        #   - arch: x64
-        #     simd: 
-        #   - arch: ARM64
-        #     simd: SSE2
-        #   - arch: ARM64
-        #     simd: AVX
+        simd: [SSE2]
+        # we need no simd set for ARM64 and this is easiest way
         include:
-          - arch: ARM64
+          - configuration: FastDebug
+            arch: ARM64
+            simd: 
+          - configuration: Release
+            arch: ARM64
             simd: 
     name: Windows
-    # runs-on: windows-2019
-    runs-on: ubuntu-latest
+    runs-on: windows-2019
     steps:
       - name: Display matrix config
         run: echo "${{ matrix.configuration }} - ${{ matrix.arch }} - ${{ matrix.simd }}"
