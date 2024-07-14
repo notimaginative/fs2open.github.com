@@ -10,15 +10,16 @@ jobs:
       matrix:
         configuration: [FastDebug, Release]
         arch: [Win32, x64, ARM64]
-        simd: [SSE2, AVX]
+        simd: [SSE2, AVX, ""]
         exclude:
+          - arch: Win32
+            simd: 
+          - arch: x64
+            simd: 
           - arch: ARM64
             simd: SSE2
           - arch: ARM64
             simd: AVX
-        include:
-          - arch: ARM64
-            simd: 
     name: Windows
     runs-on: windows-2019
     steps:
