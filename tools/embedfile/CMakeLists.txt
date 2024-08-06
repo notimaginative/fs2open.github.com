@@ -1,25 +1,8 @@
+cmake_minimum_required(VERSION 3.4)
 
-IF(NOT CMAKE_CROSSCOMPILING)
-	SET(EMBEDFILE_SOURCES embedfile.cpp)
+project(embedfile LANGUAGES CXX)
 
-	ADD_EXECUTABLE(embedfile EXCLUDE_FROM_ALL ${EMBEDFILE_SOURCES})
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-	target_link_libraries(embedfile compiler platform)
-
-	set_target_properties(embedfile
-		PROPERTIES
-			FOLDER "Tools"
-	)
-
-	if (PLATFORM_MAC)
-		# we build for two archs on mac, but this needs to always match the host system
-		set_target_properties(embedfile
-			PROPERTIES
-			OSX_ARCHITECTURES ${CMAKE_HOST_SYSTEM_PROCESSOR}
-		)
-	endif()
-
-	enable_clang_tidy(embedfile)
-
-	EXPORT(TARGETS embedfile FILE ${CMAKE_BINARY_DIR}/ImportExecutables.cmake)
-ENDIF(NOT CMAKE_CROSSCOMPILING)
+add_executable(embedfile embedfile.cpp)

@@ -99,7 +99,7 @@ function(handle_embedded_files _target)
 
         add_custom_command(
             OUTPUT ${ALL_OUTPUTS}
-            COMMAND embedfile "${_filePath}" "${_outputBasePath}" "${FIELD_NAME}"
+            COMMAND ${_embedfile} "${_filePath}" "${_outputBasePath}" "${FIELD_NAME}"
             MAIN_DEPENDENCY "${_filePath}"
             COMMENT "Generating string file for ${_filePath}"
         )
