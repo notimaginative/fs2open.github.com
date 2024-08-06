@@ -2,13 +2,14 @@ name: ARM64 test workflow
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   build_windows:
     strategy:
-      # max-parallel: 1
+      max-parallel: 1
       matrix:
-        configuration: [FastDebug, Release]
+        configuration: [FastDebug]
         arch: [Win32, x64]
         simd: [SSE2]
         # we need no simd set for ARM64 and this is easiest way
@@ -16,69 +17,67 @@ jobs:
           - configuration: FastDebug
             arch: ARM64
             simd: 
-          - configuration: Release
-            arch: ARM64
-            simd: 
+          # - configuration: Release
+          #   arch: ARM64
+          #   simd: 
     name: Windows
     runs-on: windows-2019
     steps:
-      - name: Display matrix config
-        run: echo "${{ matrix.configuration }} - ${{ matrix.arch }} - ${{ matrix.simd }}"
-      # - uses: actions/checkout@v1
-      #   name: Checkout
-      #   with:
-      #     submodules: true
+      - uses: actions/checkout@v1
+        name: Checkout
+        with:
+          submodules: true
       # - name: Prepare Vulkan SDK
       #   uses: humbletim/setup-vulkan-sdk@v1.2.0
       #   with:
       #     vulkan-query-version: 1.3.204.0
       #     vulkan-components: Vulkan-Headers, Vulkan-Loader
       #     vulkan-use-cache: true
-      # - name: Configure CMake
-      #   env:
-      #     CONFIGURATION: ${{ matrix.configuration }}
-      #     ARCHITECTURE: ${{ matrix.arch }}
-      #     SIMD: ${{ matrix.simd }}
-      #   shell: bash
-      #   run: |
-      #     mkdir build
-      #     cd build
+      - name: Configure CMake
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          ARCHITECTURE: ${{ matrix.arch }}
+          SIMD: ${{ matrix.simd }}
+        shell: bash
+        run: |
+          mkdir build
+          cd build
 
-      #     SIMD_OPT=
-      #     if [ -n "$SIMD" ]; then
-      #       SIMD_OPT="-DMSVC_SIMD_INSTRUCTIONS=${SIMD}"
-      #     fi
+          SIMD_OPT=
+          if [ -n "$SIMD" ]; then
+            SIMD_OPT="-DMSVC_SIMD_INSTRUCTIONS=${SIMD}"
+          fi
 
-      #     VULKAN_OPT=
-      #     if [ "$ARCHITECTURE" = "Win32" ]; then
-      #       VULKAN_OPT="-DFSO_BUILD_WITH_VULKAN=OFF"
-      #     fi
+          VULKAN="OFF"
+          if [ "$ARCHITECTURE" = "Win32" ]; then
+            VULKAN="OFF"
+          fi
 
-      #     cmake -DCMAKE_INSTALL_PREFIX="$(pwd)/install" -DFSO_USE_SPEECH="ON" \
-      #       -DFSO_USE_VOICEREC="ON" $SIMD_OPT \
-      #       -DFSO_BUILD_QTFRED=OFF -DFSO_BUILD_TESTS=ON \
-      #       -DFSO_INSTALL_DEBUG_FILES="ON" $VULKAN_OPT -A "$ARCHITECTURE" \
-      #       -G "Visual Studio 16 2019" -T "v142" ..
-      # - name: Compile
-      #   working-directory: ./build
-      #   env:
-      #     CONFIGURATION: ${{ matrix.configuration }}
-      #   shell: bash
-      #   run: |
-      #     cmake --build . --config "$CONFIGURATION" --target INSTALL -- /verbosity:minimal
-      #     ls -alR "$(pwd)/install"
-      # - name: Set artifact id
-      #   run: |
-      #     id=
-      #     if [ -n ${{ matrix.simd }} ]; then
-      #       id="${{ matrix.configuration }}-${{ matrix.arch }}-${{ matrix.simd }}"
-      #     else
-      #       id="${{ matrix.configuration }}-${{ matrix.arch }}"
-      #     fi
-      #     echo "artifact_id=${id}" >> $GITHUB_ENV
-      # - name: Upload build result
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #     # name: windows-${{ matrix.configuration }}-${{ matrix.arch }}-${{ matrix.simd }}
-      #     name: windows-${{ env.artifact_id }}
-      #     path: ${{ github.workspace }}/build/install/*
+          cmake -DCMAKE_INSTALL_PREFIX="$(pwd)/install" -DFSO_USE_SPEECH="ON" \
+            -DFSO_USE_VOICEREC="ON" $SIMD_OPT \
+            -DFSO_BUILD_QTFRED=OFF -DFSO_BUILD_TESTS=ON \
+            -DFSO_INSTALL_DEBUG_FILES="ON" -DFSO_BUILD_WITH_VULKAN="$VULKAN" -A "$ARCHITECTURE" \
+            -G "Visual Studio 16 2019" -T "v142" ..
+      - name: Compile
+        working-directory: ./build
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+        shell: bash
+        run: |
+          cmake --build . --config "$CONFIGURATION" --target INSTALL -- /verbosity:minimal
+          ls -alR "$(pwd)/install"
+      - name: Set artifact id
+        run: |
+          id=
+          if [ -n "${{ matrix.simd }}" ]; then
+            id="${{ matrix.configuration }}-${{ matrix.arch }}-${{ matrix.simd }}"
+          else
+            id="${{ matrix.configuration }}-${{ matrix.arch }}"
+          fi
+          echo "artifact_id=${id}" >> $GITHUB_ENV
+      - name: Upload build result
+        uses: actions/upload-artifact@v3
+        with:
+          # name: windows-${{ matrix.configuration }}-${{ matrix.arch }}-${{ matrix.simd }}
+          name: windows-${{ env.artifact_id }}
+          path: ${{ github.workspace }}/build/install/*
