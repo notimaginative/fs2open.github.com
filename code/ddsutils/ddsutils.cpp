@@ -454,7 +454,7 @@ int dds_read_bitmap(const char *filename, ubyte *data, ubyte *bpp, int cf_type)
 				d_height = std::max(1U, dds_header.dwHeight << (mipmap_offset - x));
 				d_depth = has_depth ? std::max(1U, dds_header.dwDepth << (mipmap_offset - x)) : 1U;
 
-				src += (d_width * d_height * d_depth);
+				src += ((d_width + 3) / 4) * ((d_height + 3) / 4) * d_depth * ((dds_header.ddspf.dwFourCC == FOURCC_DXT1) ? 8 : 16);
 			}
 
 			for (uint m = mipmap_offset; m < dds_header.dwMipMapCount; ++m) {
