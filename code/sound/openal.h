@@ -17,7 +17,8 @@
 
 
 const char* openal_error_string(int get_alc = 0);
-bool openal_init_device(SCP_string *playback, SCP_string *capture);
+bool openal_init_device();
+void openal_close_device();
 
 ALenum openal_get_format(ALint bits, ALint n_channels);
 
