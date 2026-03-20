@@ -240,6 +240,11 @@ void interpolation_manager::add_packet(int objnum, int frame, int packet_timesta
 // should never replace index 0
 void interpolation_manager::replace_packet(int index, vec3d* pos, matrix* orient, physics_info* pip) 
 {
+	if (index < 1) {
+		UNREACHABLE("Invalid replace interpolation packet index! (%d)", index);
+		return;
+	}
+
 	// the hackiest part of the hack? Setting its frame. Let FSO think that it was basically brand new.
 	// it needs to handle it this way because otherwise another packet might get placed in front of it, 
 	// and we lose our intended effect of interpolating the simulation error away.
