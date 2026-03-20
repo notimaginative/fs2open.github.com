@@ -178,7 +178,7 @@ void interpolation_manager::reinterpolate_previous(TIMESTAMP stamp, int prev_pac
 
 	physics_snapshot temp_snapshot;
 
-	physics_interpolate_snapshots(temp_snapshot, _packets[_prev_packet_index].snapshot, _packets[_upcoming_packet_index].snapshot, scale);
+	physics_interpolate_snapshots(temp_snapshot, _packets[prev_packet_index].snapshot, _packets[next_packet_index].snapshot, scale);
 	physics_apply_snapshot_manual(position, orientation, velocity, rotational_velocity, temp_snapshot);
 }
 
