@@ -15441,7 +15441,7 @@ int ship_type_name_lookup(const char *name)
 // subsysp is a pointer to the subsystem.
 int get_subsystem_pos(vec3d* pos, const object* objp, const ship_subsys* subsysp)
 {
-	if (subsysp == NULL) {
+	if ( !subsysp || !subsysp->system_info ) {
 		*pos = objp->pos;
 		return 0;
 	}
