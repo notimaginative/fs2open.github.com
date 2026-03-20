@@ -2127,15 +2127,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data, int seq_num, int time_delt
 
 		if( seq_num > Interp_info[objnum].get_ai_comparison_frame() ){
 			if ( shipp->ai_index >= 0 ){
-				// make sure to undo the wrap if it occurred during compression for unset ai mode.
-				if (umode == 255) {
-					Ai_info[shipp->ai_index].mode = -1; 
-				}
-				else {
-					Ai_info[shipp->ai_index].mode = umode;
-				}
-				Ai_info[shipp->ai_index].submode = submode;		
-
 				// set this guy's target objnum, and other info
 				target_objp = multi_get_network_object( target_signature );
 
