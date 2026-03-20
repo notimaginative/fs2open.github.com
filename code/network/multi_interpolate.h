@@ -52,6 +52,7 @@ private:
 	int _client_info_comparison_frame; 				// what frame was the last cleint info received?
 	SCP_vector<std::pair<int,int>> _subsystems_comparison_frame;	// what frame was the last subsystem information received? (for each subsystem) First is health, second is animation
 	int _ai_comparison_frame;						// what frame was the last ai information received?
+	int _support_comparison_frame;					// what frame was the last support information received?
 
 public:
 
@@ -85,6 +86,7 @@ public:
 
 
 	int get_ai_comparison_frame() const { return _ai_comparison_frame; }
+	int get_support_comparison_frame() const { return _support_comparison_frame; }
 
 	void set_hull_comparison_frame(int frame) { _hull_comparison_frame = frame; }
 	void set_shields_comparison_frame(int frame) { _shields_comparison_frame = frame; }
@@ -105,6 +107,7 @@ public:
 	}
 
 	void set_ai_comparison_frame(int frame) { _ai_comparison_frame = frame; }
+	void set_support_comparison_frame(int frame) { _support_comparison_frame = frame; }
 
 	void force_interpolation_mode() { _simulation_mode = true; }
 
@@ -134,6 +137,7 @@ public:
 		}
 
 		_ai_comparison_frame = -1;
+		_support_comparison_frame = -1;
 	}
 
 	void clean_up() 
@@ -155,6 +159,7 @@ public:
 		_shields_comparison_frame = -1;
 		_client_info_comparison_frame = -1;
 		_ai_comparison_frame = -1;
+		_support_comparison_frame = -1;
 		_source_player_index = -1;
 	}
 };

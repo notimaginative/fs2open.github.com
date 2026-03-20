@@ -2184,26 +2184,30 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data, int seq_num, int time_delt
 		GET_INT(ai_submode);
 		GET_USHORT(dock_sig);		
 
-		// verify that it's a valid ship							
-		if((shipp != nullptr) && (shipp->ai_index >= 0) && (shipp->ai_index < MAX_AI_INFO)){
-			// bash ai info, this info does not get rebashed, because it is not as vital.
-			Ai_info[shipp->ai_index].ai_flags.from_u64(ai_flags);
-			Ai_info[shipp->ai_index].mode = ai_mode;
-			Ai_info[shipp->ai_index].submode = ai_submode;
+		if (seq_num > Interp_info[objnum].get_support_comparison_frame()) {
+			// verify that it's a valid ship
+			if((shipp != nullptr) && (shipp->ai_index >= 0) && (shipp->ai_index < MAX_AI_INFO)){
+				// bash ai info, this info does not get rebashed, because it is not as vital.
+				Ai_info[shipp->ai_index].ai_flags.from_u64(ai_flags);
+				Ai_info[shipp->ai_index].mode = ai_mode;
+				Ai_info[shipp->ai_index].submode = ai_submode;
 
-			object *objp = multi_get_network_object( dock_sig );
-			if(objp != nullptr){
-				Ai_info[shipp->ai_index].support_ship_objnum = OBJ_INDEX(objp);
-				if ((objp->instance > -1) && (objp->type == OBJ_SHIP)) {
-					Ai_info[shipp->ai_index].goals[0].target_name = Ships[objp->instance].ship_name;
-					Ai_info[shipp->ai_index].goals[0].target_signature = objp->signature;
-				} else {
-					Ai_info[shipp->ai_index].goals[0].target_name = nullptr;
-					Ai_info[shipp->ai_index].goals[0].target_signature = 0;
+				object *objp = multi_get_network_object( dock_sig );
+				if(objp != nullptr){
+					Ai_info[shipp->ai_index].support_ship_objnum = OBJ_INDEX(objp);
+					if ((objp->instance > -1) && (objp->type == OBJ_SHIP)) {
+						Ai_info[shipp->ai_index].goals[0].target_name = Ships[objp->instance].ship_name;
+						Ai_info[shipp->ai_index].goals[0].target_signature = objp->signature;
+					} else {
+						Ai_info[shipp->ai_index].goals[0].target_name = nullptr;
+						Ai_info[shipp->ai_index].goals[0].target_signature = 0;
+					}
 				}
 			}
-		}			
-	} 
+
+			Interp_info[objnum].set_support_comparison_frame(seq_num);
+		}
+	}
 
 	// make sure the ab hack is reset before we read in new info
 	Afterburn_hack = false;
