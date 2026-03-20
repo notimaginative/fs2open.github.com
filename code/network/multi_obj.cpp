@@ -632,10 +632,9 @@ void multi_ship_record_do_rollback()
 
 	// set up all restore points and ship portion of the collision list
 	for (ship& cur_ship : Ships) {
-
-		// once this happens, we've run out of ships.
+		// skip destroyed ships
 		if (cur_ship.objnum < 0) {
-			break;
+			continue;
 		}
 
 		objp = &Objects[cur_ship.objnum];
