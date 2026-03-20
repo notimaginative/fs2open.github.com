@@ -116,7 +116,7 @@ void interpolation_manager::interpolate_main(vec3d* pos, matrix* ori, physics_in
 	}
 
 	// calc what the current timing should be.
-	float numerator = static_cast<float>(_packets[_upcoming_packet_index].remote_missiontime) - static_cast<float>(Multi_Timing_Info.get_current_time());
+	float numerator = static_cast<float>(Multi_Timing_Info.get_current_time()) - static_cast<float>(_packets[_prev_packet_index].remote_missiontime);
 	float denominator = static_cast<float>(_packets[_upcoming_packet_index].remote_missiontime) - static_cast<float>(_packets[_prev_packet_index].remote_missiontime);
 	
 	// work around for weird situations that might cause NAN (you just never know with multi)
@@ -166,7 +166,7 @@ void interpolation_manager::interpolate_main(vec3d* pos, matrix* ori, physics_in
 void interpolation_manager::reinterpolate_previous(TIMESTAMP stamp, int prev_packet_index, int next_packet_index,  vec3d& position, matrix& orientation, vec3d& velocity, vec3d& rotational_velocity)
 {
 	// calc what the timing was previously.
-	float numerator = static_cast<float>(_packets[next_packet_index].remote_missiontime) - static_cast<float>(stamp.value());
+	float numerator = static_cast<float>(stamp.value()) - static_cast<float>(_packets[prev_packet_index].remote_missiontime);
 	float denominator = static_cast<float>(_packets[next_packet_index].remote_missiontime) - static_cast<float>(_packets[prev_packet_index].remote_missiontime);
 
 	denominator = (denominator > 0.05f) ? denominator : 0.05f;
