@@ -139,8 +139,12 @@ struct oo_general_info {
 
 oo_general_info Oo_info;
 
-// flags
-bool Afterburn_hack = false;			// HACK!!!
+// This is part of a fix for AB trails and related model animations not working
+// for other ships in multi. The "hack" part is so the fix applies to hosts as well.
+// This could possibly be revisited in a future multi bump with a better solution - taylor
+// See: https://github.com/scp-fs2open/fs2open.github.com/commit/186bd01
+// Or: "mantis bug 895 response" in SCP Internal on HLP forums
+static bool Afterburn_hack = false;			// HACK!!!
 
 // returns the last frame's index.
 int multi_find_prev_frame_idx();
@@ -1840,6 +1844,9 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data, int seq_num, int time_delt
 	// SPECIAL CLIENT INFO
 	// ---------------------------------------------------------------------------------------------------------------
 
+	// make sure the ab hack is reset before we read in new info
+	Afterburn_hack = false;
+
 	// if this is from a player, read his button info
 	if(MULTIPLAYER_MASTER){
 		int r0 = multi_oo_unpack_client_data(pl, data + offset, seq_num > Interp_info[objnum].get_client_info_comparison_frame());
@@ -2199,9 +2206,6 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data, int seq_num, int time_delt
 			Interp_info[objnum].set_support_comparison_frame(seq_num);
 		}
 	}
-
-	// make sure the ab hack is reset before we read in new info
-	Afterburn_hack = false;
 
 	// afterburner info
 	if ( (oo_flags & OO_AFTERBURNER_NEW) || Afterburn_hack ) {
