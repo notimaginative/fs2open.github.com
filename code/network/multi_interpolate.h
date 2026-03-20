@@ -6,7 +6,7 @@
 
 struct physics_info;
 
-constexpr int PACKET_INFO_LIMIT = 4; // we should never need more than 4 packets to do interpolation.  Overwrite the oldest ones if we do.
+constexpr size_t PACKET_INFO_LIMIT = 4; // we should never need more than 4 packets to do interpolation.  Overwrite the oldest ones if we do.
 
 typedef struct packet_info {
 
@@ -42,7 +42,7 @@ private:
 	SCP_vector<packet_info> _packets;	// all the info from the position/orientation portion of packets that we care to keep
 	int _source_player_index;
 
-	void reassess_packet_index(vec3d* pos, matrix* ori, physics_info* pip);		// for finding which packets from within _packets we should use
+	void reassess_packet_index(vec3d* pos = nullptr, matrix* ori = nullptr, physics_info* pip = nullptr);		// for finding which packets from within _packets we should use
 	void replace_packet(int index, vec3d* pos, matrix* orient, physics_info* pip);	// a function that acts as a workaround, when coming out of simulation_mode
 
 	// Frame numbers that helps us figure out if we should ignore new information coming from the server because
