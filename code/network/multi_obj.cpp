@@ -1851,6 +1851,11 @@ int multi_oo_unpack_data(net_player* pl, ubyte* data, int seq_num, int time_delt
 	if(MULTIPLAYER_MASTER){
 		int r0 = multi_oo_unpack_client_data(pl, data + offset, seq_num > Interp_info[objnum].get_client_info_comparison_frame());
 		offset += r0;
+
+		// update comparison frame
+		if (seq_num > Interp_info[objnum].get_client_info_comparison_frame()) {
+			Interp_info[objnum].set_client_info_comparison_frame(seq_num);
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
