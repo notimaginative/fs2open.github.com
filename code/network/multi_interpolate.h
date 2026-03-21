@@ -137,6 +137,7 @@ public:
 		}
 
 		_ai_comparison_frame = -1;
+		_support_comparison_frame = -1;
 	}
 
 	void clean_up() 
@@ -158,6 +159,7 @@ public:
 		_shields_comparison_frame = -1;
 		_client_info_comparison_frame = -1;
 		_ai_comparison_frame = -1;
+		_support_comparison_frame = -1;
 		_source_player_index = -1;
 	}
 };
