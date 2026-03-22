@@ -7837,7 +7837,7 @@ void send_non_homing_fired_packet(ship* shipp, int banks_or_number_of_missiles_f
 
 	// We need the time elpased, so send the last frame we got from the server and how much time has happened since then.
 	int last_received_frame = multi_client_lookup_frame_idx();
-	auto time_elapsed = static_cast<ushort>(timestamp_since(multi_client_lookup_frame_timestamp()));
+	auto time_elapsed = static_cast<ushort>(Multi_Timing_Info.get_current_time() - multi_client_lookup_frame_timestamp());
 
 	ADD_INT(last_received_frame);
 	ADD_USHORT(time_elapsed);
