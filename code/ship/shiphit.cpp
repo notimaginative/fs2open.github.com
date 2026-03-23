@@ -31,6 +31,7 @@
 #include "mission/missionlog.h"
 #include "mod_table/mod_table.h"
 #include "network/multi.h"
+#include "network/multi_interpolate.h"
 #include "network/multi_pmsg.h"
 #include "network/multi_respawn.h"
 #include "network/multimsgs.h"
@@ -2144,6 +2145,11 @@ void ship_apply_whack(const vec3d *force, const vec3d *hit_pos, object *objp)
 		game_whack_apply( -test.xyz.x, -test.xyz.y );
 	}
 
+	if ((Game_mode & GM_MULTIPLAYER) && (objp->type == OBJ_SHIP)) {
+		// temporarily set this as an uninterpolated ship, to make the collision
+		// look more natural until the next update comes in.
+		Interp_info[OBJ_INDEX(objp)].force_interpolation_mode();
+	}
 
 	if (object_is_docked(objp))
 	{
