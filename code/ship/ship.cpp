@@ -21062,6 +21062,7 @@ void parse_armor_type()
 	stuff_string(name_buf, F_NAME, NAME_LENGTH);
 	
 	tat = ArmorType(name_buf);
+	tat.flags = 0;
 	
 	//now parse the actual table (damage type/armor type pairs)
 	tat.ParseData();
