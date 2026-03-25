@@ -233,7 +233,7 @@ namespace os
 			boxData.title = "Error!";
 			boxData.window = getDialogParent();
 
-			gr_activate(0);
+			gr_activate(false);
 
 			int buttonId;
 			if ( !SDL_ShowMessageBox(&boxData, &buttonId) )
@@ -255,7 +255,7 @@ namespace os
 				break;
 			}
 
-			gr_activate(1);
+			gr_activate(true);
 		}
 
 		void Error(const char * filename, int line, const char * format, ...)
@@ -317,7 +317,7 @@ namespace os
 			boxData.title = "Error!";
 			boxData.window = getDialogParent();
 
-			gr_activate(0);
+			gr_activate(false);
 
 			int buttonId;
 			if ( !SDL_ShowMessageBox(&boxData, &buttonId) )
@@ -335,7 +335,7 @@ namespace os
 				Int3();
 				break;
 			}
-			gr_activate(1);
+			gr_activate(true);
 		}
 
 		// Actual implementation of the warning function. Used by the various warning functions
@@ -385,7 +385,7 @@ namespace os
 			boxData.title = "Warning!";
 			boxData.window = getDialogParent();
 
-			gr_activate(0);
+			gr_activate(false);
 
 			int buttonId;
 			if ( !SDL_ShowMessageBox(&boxData, &buttonId) )
@@ -407,7 +407,7 @@ namespace os
 				break;
 			}
 
-			gr_activate(1);
+			gr_activate(true);
 		}
 
 
@@ -487,11 +487,11 @@ namespace os
 			SCP_string boxMessage = truncateLines(boxMsgStream, Messagebox_lines);
 			boxMessage += "\n[ This info is in the clipboard so you can paste it somewhere now ]\n";
 
-			gr_activate(0);
+			gr_activate(false);
 
 			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Information", boxMessage.c_str(), getDialogParent());
 
-			gr_activate(1);
+			gr_activate(true);
 		}
 
 		void Message(MessageType type, const char* message, const char* title)
