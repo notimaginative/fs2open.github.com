@@ -314,6 +314,19 @@ void multi_options_read_config()
 							Multi_options_g.webapiPort = (ushort) result;
 						}
 					}
+				} else
+				// set framerate for standalone
+				if ( SETTING("+fps_cap") ) {
+					NEXT_TOKEN();
+					if (tok != nullptr) {
+						if ((atoi(tok) >= 15) && (atoi(tok) <= 120)) {
+							Multi_options_g.std_framecap = atoi(tok);
+						}
+					}
+				} else
+				// disable rollback for primary/dumbfire weapons
+				if ( SETTING("+rollback_disabled") ) {
+					Multi_options_g.std_rollback = false;
 				}
 			}
 

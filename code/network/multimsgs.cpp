@@ -7939,7 +7939,7 @@ void process_non_homing_fired_packet(ubyte* data, header* hinfo)
 
 	object* objp_ref = multi_get_network_object(target_ref);
 
-	if (objp_ref == nullptr || objp_ref->type != OBJ_SHIP) {
+	if ((Is_standalone && !Multi_options_g.std_rollback) || !objp_ref || (objp_ref->type != OBJ_SHIP)) {
 		// new way failed, use the old new way.
 
 		if (objp_ref != nullptr){
