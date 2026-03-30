@@ -1803,7 +1803,7 @@ void multi_join_cull_timeouts()
 
 	// traverse through the entire list if any items exist
 	int i = 0;
-	for (auto game = Active_games.begin(); game != Active_games.end(); ++game) {
+	for (auto game = Active_games.begin(); game != Active_games.end(); ) {
 		if (game->heard_from_timer.isValid() && (ui_timestamp_elapsed(game->heard_from_timer))) {
 
 			// handle any gui details related to deleting this item
@@ -1815,9 +1815,10 @@ void multi_join_cull_timeouts()
 			}
 
 			// delete the item
-			Active_games.erase(game);
+			game = Active_games.erase(game);
 		} else {
 			++i;
+			++game;
 		}
 	}
 }
