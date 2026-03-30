@@ -1490,16 +1490,18 @@ int multi_oo_pack_data(net_player *pl, object *objp, ushort oo_flags, ubyte *dat
 		auto submode = (short)(aip->submode);
 		ushort target_signature = 0;
 
-		// either send out the waypoint they are trying to get to *or* their current target
+		// either send out the waypoint they are trying to get to *or* their current target.
 		if (umode == AIM_WAYPOINTS) {
 			// if it's already started pointing to a waypoint, grab its net_signature and send that instead
 			waypoint* wp;
 			if ((wp = find_waypoint_at_indexes(aip->wp_list_index, aip->wp_index)) != nullptr) {
 				target_signature = Objects[wp->get_objnum()].net_signature;
 			}
-		} // send the target signature. 2021 Version!
-		else if ((aip->goals[0].target_name != nullptr) && strlen(aip->goals[0].target_name) != 0) {
-			
+		} else if (aip->target_objnum >= 0) {
+			// prefer live target_objnum so clients can check both ordered goal targets and spontaneous targets
+			target_signature = Objects[aip->target_objnum].net_signature;
+		}  else if ((aip->goals[0].target_name != nullptr) && strlen(aip->goals[0].target_name) != 0) {
+			// send the target signature. 2021 Version!
 			int instance = ship_name_lookup(aip->goals[0].target_name);
 			if (instance > -1) {
 				target_signature = Objects[Ships[instance].objnum].net_signature;
