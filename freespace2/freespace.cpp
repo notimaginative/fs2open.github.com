@@ -6286,6 +6286,10 @@ void mouse_force_pos(int x, int y);
 			break;		
 
 		case GS_STATE_LOOP_BRIEF:
+			if (old_state == GS_STATE_MAIN_MENU) {
+				main_hall_stop_music(true);
+				main_hall_stop_ambient();
+			}
 			loop_brief_init();
 			break;
 
