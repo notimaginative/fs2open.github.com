@@ -8837,6 +8837,7 @@ void multi_debrief_esc_hit()
 						multi_sw_report(stats_saved);
 					}
 				}
+
 			}
 
 			multi_quit_game(PROMPT_HOST);
