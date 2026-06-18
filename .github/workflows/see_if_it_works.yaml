@@ -1,0 +1,118 @@
+name: Build Nightly package
+
+on:
+  push:
+    branches:
+      - 'see_if_it_works'
+
+env:
+  QT_VERSION: 5.12.12
+
+jobs:
+  build_mac:
+    strategy:
+      matrix:
+        configuration: [FastDebug]
+        compiler: [clang]
+        arch: [arm64]
+    name: Mac
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Set git workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.304.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+      - name: Set up test version
+        shell: bash
+        run: |
+          [[ "${{ github.ref }}" =~ ^refs\/heads\/test\/(.*)$ ]]
+          # Override the revision string so that the builds are named correctly
+          echo "set(FSO_VERSION_REVISION_STR ${BASH_REMATCH[1]})" > "version_override.cmake"]
+      - name: Configure CMake
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          COMPILER: ${{ matrix.compiler }}
+          ARCHITECTURE: ${{ matrix.arch }}
+          JOB_CMAKE_OPTIONS: ${{ matrix.cmake_options }}
+          ENABLE_QTFRED: OFF
+        run: $GITHUB_WORKSPACE/ci/linux/configure_cmake.sh
+      - name: Compile
+        working-directory: ./build
+        run: LD_LIBRARY_PATH=$Qt5_DIR/lib:$LD_LIBRARY_PATH ninja all
+      - name: Run Tests
+        working-directory: ./build
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          ARCH: ${{ matrix.arch }}
+          XDG_RUNTIME_DIR: /root
+        run: $GITHUB_WORKSPACE/ci/linux/run_tests.sh
+      - name: Sign builds
+        working-directory: ./build/bin
+        run: |
+          # make sure OpenAL framework is signed
+          find . -name OpenAL -type f | while read xx; do codesign --force -s - $xx; done
+          find . -name OpenAL.framework -type d | while read xx; do codesign --force -s - $xx; done
+          # make sure dylibs are signed
+          find . -name \*.dylib -type f | while read xx; do codesign --force -s - $xx; done
+          # sign binaries
+          find . -perm +111 -type f | grep MacOS | while read xx; do codesign --force -s - $xx; done
+          # sign apps
+          find . -name \*.app -maxdepth 1 | while read xx; do codesign --force -s - $xx; done
+      - name: Package build result
+        working-directory: ./build/bin
+        # Use GNU tar here (part of runner image) to avoid weird corruption bug with bsdtar
+        # Ref: https://github.com/actions/runner-images/issues/2619
+        run: gtar -cvzf macos-build-${{ matrix.configuration }}-${{ matrix.arch }}.tgz *.app
+      - name: Upload build result
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-${{ matrix.configuration }}-${{ matrix.arch }}
+          path: ${{ github.workspace }}/build/bin/macos-build-${{ matrix.configuration }}-${{ matrix.arch }}.tgz
+  mac_zip:
+    name: Build Mac distribution zip
+    needs: build_mac
+    runs-on: ubuntu-latest
+    container: ghcr.io/scp-fs2open/sftp_upload:sha-844131c
+    strategy:
+      matrix:
+        arch: [arm64]
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout
+        with:
+          submodules: true
+          fetch-depth: '0'
+          ref: '${{ github.ref }}'
+      - name: Set git workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Download FastDebug builds
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-FastDebug-${{ matrix.arch }}
+          path: builds
+      - name: Unpack builds
+        working-directory: ./builds
+        run: |
+          tar -xvzf macos-build-FastDebug-${{ matrix.arch }}.tgz
+      - name: Create Distribution package
+        working-directory: ./builds
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: $GITHUB_WORKSPACE/ci/linux/create_dist_pack.sh Mac
+      - name: Upload result package
+        working-directory: ./builds
+        env:
+          INDIEGAMES_USER: ${{ secrets.INDIEGAMES_USER }}
+          INDIEGAMES_SSHPASS: ${{ secrets.INDIEGAMES_PASSWORD }}
+          DATACORDER_USER: ${{ secrets.DATACORDER_USER }}
+          DATACORDER_SSHPASS: ${{ secrets.DATACORDER_PASSWORD }}
+        run: $GITHUB_WORKSPACE/ci/linux/upload_dist_package.sh nightly
