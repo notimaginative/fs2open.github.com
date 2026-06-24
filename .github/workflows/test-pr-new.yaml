@@ -1,9 +1,9 @@
 name: Check a pull request
 
-# on:
-#   push:
-#     branches:
-#       - 'new_build_image_test'
+on:
+  push:
+    branches:
+      - 'new_build_image_test'
 
 jobs:
   build_linux:
@@ -62,6 +62,62 @@ jobs:
         working-directory: ./build
         env:
           CONFIGURATION: ${{ matrix.configuration }}
+          XDG_RUNTIME_DIR: /root
+        run: $GITHUB_WORKSPACE/ci/linux/run_tests.sh
+      - name: Show CCache statistics
+        run: ccache --show-stats
+      - name: Run Clang Tidy
+        # Clang-tidy reuses the precompiled headers so this only makes sense for the clang compilers
+        if: startsWith(matrix.compiler, 'clang-')
+        run: $GITHUB_WORKSPACE/ci/linux/clang_tidy.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+      - name: Process clang-tidy warnings
+        if: startsWith(matrix.compiler, 'clang-')
+        uses: asarium/clang-tidy-action@v1
+        with:
+          fixesFile: clang-fixes.yaml
+
+  build_mac:
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        compiler: [clang]
+        arch: [x86_64, arm64]
+        cmake_options: [""]
+    name: Mac
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Set workspace as safe
+        # This appears to be broken in current actions, so do it manually
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: ${{ runner.os }}-${{ matrix.configuration }}-${{ matrix.compiler }}-${{ matrix.arch }}
+          save: false # Caches are created by a separate job and only restored for PRs
+      - name: Configure ccache
+        run: ccache --set-config=sloppiness=pch_defines,time_macros
+      - name: Configure CMake
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          COMPILER: ${{ matrix.compiler }}
+          ARCHITECTURE: ${{ matrix.arch }}
+          JOB_CMAKE_OPTIONS: ${{ matrix.cmake_options }}
+          CCACHE_PATH: /usr/local/bin/ccache
+          ENABLE_QTFRED: OFF
+        run: $GITHUB_WORKSPACE/ci/linux/configure_cmake.sh
+      - name: Compile
+        working-directory: ./build
+        run: ninja all
+      - name: Run Tests
+        working-directory: ./build
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          ARCH: ${{ matrix.arch }}
           XDG_RUNTIME_DIR: /root
         run: $GITHUB_WORKSPACE/ci/linux/run_tests.sh
       - name: Show CCache statistics
