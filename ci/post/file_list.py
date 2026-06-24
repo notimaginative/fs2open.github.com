@@ -1,6 +1,7 @@
 import re # regex module
 from ftplib import FTP, error_perm
 from itertools import groupby
+from tokenize import group
 from typing import List, Tuple, Dict
 
 import requests  # HTTP requests module
@@ -149,6 +150,8 @@ def get_release_files(tag_name, config) -> Tuple[List[ReleaseFile], Dict[str, So
             # x64 is the Visual Studio name but for consistency we need Win64
             if platform == "x64":
                 platform = "Win64"
+            elif platform == "arm64":
+                platform = "WinARM64"
 
             binary_files.append(ReleaseFile(name, url, platform, group_match.group(3)))
         else:
@@ -213,6 +216,8 @@ def get_ftp_files(build_type, tag_name, config) -> List[ReleaseFile] :
         # x64 is the name Visual Studio uses but Win64 works better for us since that gets displayed in the nightly post
         if "x64" in group_match:
             group_match = group_match.replace("x64", "Win64")
+        elif "arm64" in group_match:
+            group_match = group_match.replace("arm64", "WinARM64")
 
         # construct the download URL list for all mirrors.  The first listed ftp location is taken as the Primary
         for mirror in config["ftp"]["mirrors"]:

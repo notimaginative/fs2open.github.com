@@ -1,9 +1,9 @@
 name: Build Nightly package (test)
 
-on:
-  push:
-    branches:
-      - 'new_build_image_test'
+# on:
+#   push:
+#     branches:
+#       - 'new_build_image_test'
 
 jobs:
   build_linux:
