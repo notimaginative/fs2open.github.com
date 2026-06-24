@@ -3,7 +3,7 @@ name: Build caches for master
 on:
   push:
     branches:
-      - 'new_build_image_test'
+      - 'new_build_image_test-xxx'
 
 jobs:
   build_linux:
