@@ -3875,8 +3875,8 @@ void VulkanPostProcessor::renderSceneFog(vk::CommandBuffer cmd)
 	// Fill fog UBO
 	graphics::generic_data::fog_data fogData;
 	{
-		float fog_near, fog_far, fog_density;
-		neb2_get_adjusted_fog_values(&fog_near, &fog_far, &fog_density);
+		float fog_near, fog_density;
+		neb2_get_adjusted_fog_values(&fog_near, &fog_density);
 		unsigned char r, g, b;
 		neb2_get_fog_color(&r, &g, &b);
 

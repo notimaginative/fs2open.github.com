@@ -422,7 +422,8 @@ static int opengl_texture_set_level(int bitmap_handle, int bitmap_type, int bmap
 
 	// check for compressed image types
 	auto block_size = dds_block_size(bm_is_compressed(bitmap_handle));
-	switch (bm_is_compressed(bitmap_handle)) {
+	auto bm_handle = bm_is_compressed(bitmap_handle);
+	switch (bm_handle) {
 	case DDS_DXT1:
 	case DDS_CUBEMAP_DXT1:
 		intFormat  = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
