@@ -54,5 +54,5 @@ ADD_SUBDIRECTORY(lz4)
 ADD_SUBDIRECTORY(imgui)
 
 if(FSO_BUILD_WITH_OPENXR)
-	add_subdirectory(openxr)
+	add_subdirectory(openxr EXCLUDE_FROM_ALL)
 endif()
