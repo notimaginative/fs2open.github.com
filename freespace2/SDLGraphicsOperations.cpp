@@ -157,24 +157,18 @@ class SDLWindowViewPort: public os::Viewport {
 				SDL_SetWindowFullscreen(_window, false);
 				SDL_SetWindowBordered(_window, false);
 				break;
-			case os::ViewportState::Fullscreen: {
-				SDL_DisplayMode target;
-				int width, height;
+			case os::ViewportState::Fullscreen:
+				// Use desktop (borderless) fullscreen rather than exclusive
+				// fullscreen. Exclusive fullscreen performs a real video mode
+				// change which is unreliable with an active Vulkan surface
+				// (it can fail or invalidate the surface, stranding swap chain
+				// resources). Desktop fullscreen keeps the surface valid so the
+				// swap chain can simply be recreated.
+				SDL_SetWindowFullscreenMode(_window, nullptr);
 
-				if (SDL_GetWindowSizeInPixels(_window, &width, &height)) {
-					if (SDL_GetClosestFullscreenDisplayMode(SDL_GetDisplayForWindow(_window),
-															width, height, 0.0f, true, &target))
-					{
-						SDL_SetWindowFullscreenMode(_window, &target);
-					}
+				if ( !SDL_SetWindowFullscreen(_window, true) ) {
+					mprintf(("Failed to enter fullscreen: %s\n", SDL_GetError()));
 				}
-
-				// NOTE: This can be buggy if the mode failed to set since FSO
-				// doesn't account for a difference between assumed window size
-				// and actual window size. This can present as screen anomalies
-				// such as distortion, mirroring, or flickering.
-				SDL_SetWindowFullscreen(_window, true);
-
 				break;
 			}
 			default:
@@ -258,7 +252,9 @@ std::unique_ptr<os::Viewport> SDLGraphicsOperations::createViewport(const os::Vi
 		// don't set window flag here since we need to alter the display mode
 		// first and that can only be done after the window is created
 		//
-		// windowflags |= SDL_WINDOW_FULLSCREEN;
+		// Desktop (borderless) fullscreen avoids an exclusive video mode change,
+		// which is unreliable with Vulkan surfaces. See setState() for details.
+		// windowflags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 	}
 	if (props.flags[os::ViewPortFlags::Resizeable]) {
 		windowflags |= SDL_WINDOW_RESIZABLE;

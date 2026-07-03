@@ -138,8 +138,7 @@ void OptConfigurator::offer_save_options_popup()
 
 // The main Imgui rendering happens here as well as any i/o checking
 void OptConfigurator::onFrame() {
-	if (gr_screen.mode == GR_OPENGL)
-		ImGui_ImplOpenGL3_NewFrame();
+	gr_imgui_new_frame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 
@@ -178,8 +177,7 @@ void OptConfigurator::onFrame() {
 	if (Cmdline_show_imgui_debug)
 		ImGui::ShowDemoWindow();
 	ImGui::Render();
-	if (gr_screen.mode == GR_OPENGL)
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	gr_imgui_render_draw_data();
 
 	if (CloseThis) {
 		close();
