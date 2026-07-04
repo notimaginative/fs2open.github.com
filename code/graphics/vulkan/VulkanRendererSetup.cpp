@@ -515,7 +515,7 @@ bool VulkanRenderer::initializeInstance()
 	SCP_vector<const char*> extensions;
 	extensions.reserve(count);
 
-	for (auto i = 0; i < count; ++i) {
+	for (uint32_t i = 0; i < count; ++i) {
 		// SDL 3.2 will include portability enueration extension even if it's not
 		// supported so make sure not to add it blindly and check for later
 		if (SDL_strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, extPtr[i])) {
