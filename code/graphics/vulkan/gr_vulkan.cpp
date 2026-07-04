@@ -487,7 +487,7 @@ bool initialize(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	// inside VulkanRenderer::initImGui() after all Vulkan objects are ready.
 	SDL_Window* window = os::getSDLMainWindow();
 	if (window) {
-		ImGui_ImplSDL2_InitForVulkan(window);
+		ImGui_ImplSDL3_InitForVulkan(window);
 	}
 
 	gr_screen.gf_flip = vulkan_flip;

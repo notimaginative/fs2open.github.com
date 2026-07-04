@@ -15,9 +15,7 @@
 #include "libs/renderdoc/renderdoc.h"
 #include "mod_table/mod_table.h"
 
-#if SDL_VERSION_ATLEAST(2, 0, 6)
-#include <SDL_vulkan.h>
-#endif
+#include <SDL3/SDL_vulkan.h>
 
 
 extern float flFrametime;
@@ -25,7 +23,7 @@ extern float flFrametime;
 namespace graphics::vulkan {
 
 namespace {
-#if SDL_SUPPORTS_VULKAN
+
 const char* EngineName = "FreeSpaceOpen";
 
 const gameversion::version MinVulkanVersion(1, 1, 0, 0);
@@ -43,7 +41,6 @@ VkBool32 VKAPI_PTR debugReportCallback(
 	mprintf(("Vulkan message: [%s]: %s\n", pLayerPrefix, pMessage));
 	return VK_FALSE;
 }
-#endif
 
 const SCP_vector<const char*> RequiredDeviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -278,8 +275,13 @@ bool VulkanRenderer::initialize()
 		return false;
 	}
 
-	if (!initializeInstance()) {
-		mprintf(("Failed to create Vulkan instance!\n"));
+	try {
+		if (!initializeInstance()) {
+			mprintf(("Failed to create Vulkan instance!\n"));
+			return false;
+		}
+	} catch(vk::ExtensionNotPresentError err) {
+		mprintf(("Vulkan ERROR: %s\n", err.what()));
 		return false;
 	}
 
@@ -451,7 +453,7 @@ bool VulkanRenderer::initDisplayDevice() const
 	attrs.enable_opengl = false;
 	attrs.enable_vulkan = true;
 
-	attrs.display = os_config_read_uint("Video", "Display", 0);
+	attrs.display = gr_get_preferred_display();
 	attrs.width = static_cast<uint32_t>(gr_screen.max_w);
 	attrs.height = static_cast<uint32_t>(gr_screen.max_h);
 
@@ -495,26 +497,30 @@ bool VulkanRenderer::initDisplayDevice() const
 }
 bool VulkanRenderer::initializeInstance()
 {
-#if SDL_SUPPORTS_VULKAN
 	const auto vkGetInstanceProcAddr =
 		reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
 
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
-	const auto window = os::getSDLMainWindow();
+	VkInstanceCreateFlags createFlags = 0;
+	uint32_t count = 0;
 
-	unsigned int count;
-	if (!SDL_Vulkan_GetInstanceExtensions(window, &count, nullptr)) {
-		mprintf(("Error in first SDL_Vulkan_GetInstanceExtensions: %s\n", SDL_GetError()));
+	auto extPtr = SDL_Vulkan_GetInstanceExtensions(&count);
+
+	if ( !extPtr ) {
+		mprintf(("Error in SDL_Vulkan_GetInstanceExtensions: %s\n", SDL_GetError()));
 		return false;
 	}
 
 	SCP_vector<const char*> extensions;
-	extensions.resize(count);
+	extensions.reserve(count);
 
-	if (!SDL_Vulkan_GetInstanceExtensions(window, &count, extensions.data())) {
-		mprintf(("Error in second SDL_Vulkan_GetInstanceExtensions: %s\n", SDL_GetError()));
-		return false;
+	for (int i = 0; i < count; ++i) {
+		// SDL 3.2 will include portability enueration extension even if it's not
+		// supported so make sure not to add it blindly and check for later
+		if (SDL_strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, extPtr[i])) {
+			extensions.push_back(extPtr[i]);
+		}
 	}
 
 	const auto instanceVersion = vk::enumerateInstanceVersion();
@@ -544,6 +550,12 @@ bool VulkanRenderer::initializeInstance()
 				m_debugUtilsEnabled = true;
 			}
 		}
+
+		// if portability enumeration extension is present then we need to add it
+		if ( !stricmp(ext.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) ) {
+			extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			createFlags += VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		}
 	}
 
 	SCP_vector<const char*> layers;
@@ -569,7 +581,7 @@ bool VulkanRenderer::initializeInstance()
 	vk::ApplicationInfo appInfo(Window_title.c_str(), 1, EngineName, 1, VK_API_VERSION_1_1);
 
 	// Now we can make the Vulkan instance
-	vk::InstanceCreateInfo createInfo(vk::Flags<vk::InstanceCreateFlagBits>(), &appInfo);
+	vk::InstanceCreateInfo createInfo(vk::Flags<vk::InstanceCreateFlagBits>(createFlags), &appInfo);
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 	createInfo.ppEnabledExtensionNames = extensions.data();
 	createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
@@ -605,19 +617,14 @@ bool VulkanRenderer::initializeInstance()
 
 	m_vkInstance = std::move(instance);
 	return true;
-#else
-	mprintf(("SDL does not support Vulkan in its current version.\n"));
-	return false;
-#endif
 }
 
 bool VulkanRenderer::initializeSurface()
 {
-#if SDL_SUPPORTS_VULKAN
 	const auto window = os::getSDLMainWindow();
 
 	VkSurfaceKHR surface;
-	if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(*m_vkInstance), &surface)) {
+	if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(*m_vkInstance), nullptr, &surface)) {
 		mprintf(("Failed to create vulkan surface: %s\n", SDL_GetError()));
 		return false;
 	}
@@ -627,9 +634,6 @@ bool VulkanRenderer::initializeSurface()
 		VULKAN_HPP_DEFAULT_DISPATCHER);
 	m_vkSurface = vk::UniqueSurfaceKHR(vk::SurfaceKHR(surface), deleter);
 	return true;
-#else
-	return false;
-#endif
 }
 
 bool VulkanRenderer::pickPhysicalDevice(PhysicalDeviceValues& deviceValues)
