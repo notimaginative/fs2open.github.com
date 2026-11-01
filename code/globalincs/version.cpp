@@ -199,6 +199,8 @@ SCP_string get_version_string()
 	str += " Debug";
 #endif
 
+	str += " SDL3";
+
 	// Lets get some more info in here
 	switch (gr_screen.mode) {
 	case GR_OPENGL:

@@ -6,11 +6,7 @@
 
 #include <vulkan/vulkan.hpp>
 
-#if SDL_VERSION_ATLEAST(2, 0, 6)
 #define SDL_SUPPORTS_VULKAN 1
-#else
-#define SDL_SUPPORTS_VULKAN 0
-#endif
 
 namespace graphics {
 namespace vulkan {

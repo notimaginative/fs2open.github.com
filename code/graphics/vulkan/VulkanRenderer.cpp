@@ -10,9 +10,7 @@
 #include "libs/renderdoc/renderdoc.h"
 #include "mod_table/mod_table.h"
 
-#if SDL_VERSION_ATLEAST(2, 0, 6)
-#include <SDL_vulkan.h>
-#endif
+#include <SDL3/SDL_vulkan.h>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 

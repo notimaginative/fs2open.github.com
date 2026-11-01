@@ -6,11 +6,11 @@
 #CXX = g++
 #CXX = clang++
 
-EXE = example_sdl_metal
+EXE = example_sdl2_metal
 IMGUI_DIR = ../..
 SOURCES = main.mm
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
-SOURCES += $(IMGUI_DIR)/backends/imgui_impl_sdl.cpp $(IMGUI_DIR)/backends/imgui_impl_metal.mm
+SOURCES += $(IMGUI_DIR)/backends/imgui_impl_sdl2.cpp $(IMGUI_DIR)/backends/imgui_impl_metal.mm
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 
 LIBS = -framework Metal -framework MetalKit -framework Cocoa -framework IOKit -framework CoreVideo -framework QuartzCore
