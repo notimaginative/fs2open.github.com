@@ -11,9 +11,9 @@ jobs:
       fail-fast: true
       matrix:
         configuration: [FastDebug, Release]
-        os: [ubuntu-latest, ubuntu-24.04-arm]
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             arch: x86_64
           - os: ubuntu-24.04-arm
             arch: arm64
@@ -51,7 +51,7 @@ jobs:
           CONFIGURATION: ${{ matrix.configuration }}
         run: $GITHUB_WORKSPACE/ci/linux/generate_appimage.sh $GITHUB_WORKSPACE/build/install
       - name: Upload build result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.configuration }}-${{ matrix.arch }}
           path: ${{ github.workspace }}/build/install/*.AppImage
@@ -63,7 +63,7 @@ jobs:
         configuration: [FastDebug, Release]
         os: [windows-2025, windows-11-arm]
         arch: [Win32, x64, ARM64]
-        simd: [SSE2, AVX, ""]
+        simd: [SSE2, ""]
         exclude:
             - arch: Win32
               os: windows-11-arm
@@ -75,8 +75,6 @@ jobs:
               simd: ""
             - os: windows-11-arm
               simd: SSE2
-            - os: windows-11-arm
-              simd: AVX
     name: Windows
     runs-on: ${{ matrix.os }}
     steps:
@@ -130,7 +128,7 @@ jobs:
           fi
           echo "artifact_id=${id}" >> $GITHUB_ENV
       - name: Upload build result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-${{ env.artifact_id }}
           path: ${{ github.workspace }}/build/install/*
@@ -189,7 +187,7 @@ jobs:
         # Ref: https://github.com/actions/runner-images/issues/2619
         run: gtar -cvzf macos-build-${{ matrix.configuration }}-${{ matrix.arch }}.tgz *.app
       - name: Upload build result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mac-${{ matrix.configuration }}-${{ matrix.arch }}
           path: ${{ github.workspace }}/build/bin/macos-build-${{ matrix.configuration }}-${{ matrix.arch }}.tgz
