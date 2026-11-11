@@ -172,6 +172,11 @@ namespace
 						gr_screen_resize(e.window.data1, e.window.data2);
 					}
 					break;
+
+				case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+					auto vp = os::getMainViewport();
+					if (vp) vp->updateScaling();
+					break;
 			}
 
 			gr_activate(fAppActive);
@@ -463,6 +468,7 @@ void os_init(const char * wclass, const char * title, const char * app_name)
 	os::events::addEventListener(SDL_EVENT_WINDOW_FOCUS_LOST, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 	os::events::addEventListener(SDL_EVENT_WINDOW_FOCUS_GAINED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 	os::events::addEventListener(SDL_EVENT_WINDOW_CLOSE_REQUESTED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
+	os::events::addEventListener(SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 
 	os::events::addEventListener(SDL_EVENT_QUIT, os::events::DEFAULT_LISTENER_WEIGHT, quit_handler);
 
