@@ -208,7 +208,7 @@ SDLGraphicsOperations::~SDLGraphicsOperations() {
 }
 std::unique_ptr<os::Viewport> SDLGraphicsOperations::createViewport(const os::ViewPortProperties& props)
 {
-	uint32_t windowflags = 0;
+	uint32_t windowflags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
 	if (props.enable_opengl) {
 		windowflags |= SDL_WINDOW_OPENGL;
 		setOGLProperties(props);
